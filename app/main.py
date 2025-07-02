@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from app.routers import auth, user_routes, project
 from app.database import engine
-from app.models import user  # Make sure models are imported so tables get created
-
+from app.models import user
+from app.models.twitter_token import TwitterToken  # ✅ explicitly imports the model class
+from app.database import Base
 from fastapi.security import HTTPBearer
 
 # Create the FastAPI app
@@ -19,11 +20,8 @@ app.include_router(user_routes.router)
 app.include_router(project.router)
 
 
-
 # Create database tables
-user.Base.metadata.create_all(bind=engine)
-
-
+Base.metadata.create_all(bind=engine)
 
 from fastapi.openapi.utils import get_openapi
 

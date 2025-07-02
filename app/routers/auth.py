@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 from starlette.responses import JSONResponse
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.twitter_token import TwitterToken
 from app.models.user import User
 
 from app.auth.token import create_access_token
@@ -36,7 +38,7 @@ def twitter_login():
         f"response_type=code"
         f"&client_id={client_id}"
         f"&redirect_uri={redirect_uri}"
-        f"&scope=users.read%20tweet.read"
+        f"&scope=users.read%20tweet.read%20offline.access"
         f"&state={state}"
         f"&code_challenge={challenge}"
         f"&code_challenge_method=S256"
@@ -85,6 +87,24 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
 
         twitter_id = user_data.get("data", {}).get("id")
         twitter_username = user_data.get("data", {}).get("username")
+        refresh_token = token_data.get("refresh_token")
+
+        # ✅ 4. Save or update Twitter token
+        existing_token = db.query(TwitterToken).filter_by(twitter_id=twitter_id).first()
+
+        if existing_token:
+            existing_token.access_token = access_token
+            existing_token.refresh_token = refresh_token
+            existing_token.updated_at = datetime.utcnow()
+        else:
+            new_token = TwitterToken(
+                twitter_id=twitter_id,
+                access_token=access_token,
+                refresh_token=refresh_token,
+            )
+            db.add(new_token)
+
+        db.commit()
 
         # ✅ 4. Check DB for existing user
         existing_user = db.query(User).filter_by(twitter_id=twitter_id).first()
