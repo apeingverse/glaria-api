@@ -80,3 +80,11 @@ def delete_project(
 def get_all_projects(db: Session = Depends(get_db)):
     projects = db.query(Project).order_by(Project.created_at.desc()).all()
     return projects
+
+
+@router.get("/{project_id}", response_model=ProjectOut)
+def get_project_by_id(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
