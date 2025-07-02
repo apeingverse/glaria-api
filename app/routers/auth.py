@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import urlencode
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 from starlette.responses import JSONResponse
@@ -51,14 +52,12 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
     if not verifier:
         return {"error": "Missing code_verifier for state."}
 
-    # ✅ 1. Set Basic Auth headers
     basic_auth = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     headers = {
         "Authorization": f"Basic {basic_auth}",
         "Content-Type": "application/x-www-form-urlencoded",
     }
 
-    # ✅ 2. Exchange code for access token
     async with httpx.AsyncClient() as client:
         res = await client.post(
             "https://api.twitter.com/2/oauth2/token",
@@ -71,55 +70,48 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
             headers=headers,
         )
         token_data = res.json()
-        print("🔍 token_data =", token_data)
-
         access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+
         if not access_token:
             return {"error": "Failed to retrieve access token.", "details": token_data}
 
-        # ✅ 3. Fetch Twitter user info
         user_res = await client.get(
             "https://api.twitter.com/2/users/me",
             headers={"Authorization": f"Bearer {access_token}"}
         )
         user_data = user_res.json()
-        print("🔍 twitter_user =", user_data)
-
         twitter_id = user_data.get("data", {}).get("id")
         twitter_username = user_data.get("data", {}).get("username")
-        refresh_token = token_data.get("refresh_token")
 
-        # ✅ 4. Save or update Twitter token
+        # Save or update token
         existing_token = db.query(TwitterToken).filter_by(twitter_id=twitter_id).first()
-
         if existing_token:
             existing_token.access_token = access_token
             existing_token.refresh_token = refresh_token
             existing_token.updated_at = datetime.utcnow()
         else:
-            new_token = TwitterToken(
+            db.add(TwitterToken(
                 twitter_id=twitter_id,
                 access_token=access_token,
-                refresh_token=refresh_token,
-            )
-            db.add(new_token)
-
+                refresh_token=refresh_token
+            ))
         db.commit()
 
-        # ✅ 4. Check DB for existing user
+        # Check user
         existing_user = db.query(User).filter_by(twitter_id=twitter_id).first()
         user_exists = existing_user is not None
 
-        # ✅ 5. If user exists, generate JWT token
         jwt_token = None
         if user_exists:
             jwt_token = create_access_token(data={"sub": str(existing_user.id)})
 
-    return {
-        "access_token": jwt_token,
-        "twitter_user": {
-            "id": twitter_id,
-            "username": twitter_username
-        },
-        "userExists": user_exists
-    }
+    # 🔁 Redirect to frontend with query params
+    query_params = urlencode({
+        "access_token": jwt_token or "",
+        "username": twitter_username,
+        "twitter_id": twitter_id,
+        "userExists": str(user_exists).lower()
+    })
+
+    return RedirectResponse(f"http://localhost:5173/oauth-success?{query_params}")
