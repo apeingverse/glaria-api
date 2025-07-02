@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from app.auth.token import get_current_user
+from app.auth.token import create_access_token, get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user_schema import UserCreate, UserResponse
@@ -8,25 +8,31 @@ from app.schemas.user_schema import UserCreate, UserResponse
 router = APIRouter(prefix="/api", tags=["User"])
 
 @router.post("/create-profile")
-def create_profile(user: UserCreate, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.username == user.username).first():
-        raise HTTPException(status_code=400, detail="Username already taken")
+def create_profile(user_data: UserCreate, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(
+        (User.username == user_data.username) |
+        (User.twitter_id == user_data.twitter_id)
+    ).first()
 
-    new_user = User(
-        username=user.username,
-        email=user.email,
-        twitter_id=user.twitter_id,
-        twitter_username=user.twitter_username,
-        wallet_address=user.wallet_address,
-        xp=100
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    user = User(
+        username=user_data.username,
+        email=user_data.email,
+        twitter_id=user_data.twitter_id,
+        twitter_username=user_data.twitter_username,
     )
-    db.add(new_user)
+    db.add(user)
     db.commit()
-    db.refresh(new_user)
+    db.refresh(user)
 
-    return {"status": "profile_created", "user_id": new_user.id}
+    token = create_access_token(data={"sub": str(user.id)})
 
-
+    return {
+        "message": "User profile successfully created",
+        "access_token": token
+    }
 
 
 @router.delete("/delete-user/{user_id}")
