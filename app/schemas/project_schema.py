@@ -34,3 +34,12 @@ class ProjectOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProjectListItem(BaseModel):
+    id: int
+    name: str
+    twitter_username: str
+    description: Optional[str]
+
+    model_config = {"from_attributes": True}

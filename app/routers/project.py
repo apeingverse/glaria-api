@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.project import Project
-from app.schemas.project_schema import ProjectCreate, ProjectUpdate, ProjectOut
+from app.schemas.project_schema import ProjectCreate, ProjectListItem, ProjectUpdate, ProjectOut
 from app.auth.token import get_current_user
 from app.models.user import User
 
@@ -76,9 +76,9 @@ def delete_project(
 
     return {"message": f"Project {project_name} was successfully deleted"}
 
-@router.get("/", response_model=List[ProjectOut])
+@router.get("/", response_model=List[ProjectListItem])
 def get_all_projects(db: Session = Depends(get_db)):
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    projects = db.query(Project).all()
     return projects
 
 
