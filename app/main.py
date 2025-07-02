@@ -5,9 +5,24 @@ from app.models import user
 from app.models.twitter_token import TwitterToken  # ✅ explicitly imports the model class
 from app.database import Base
 from fastapi.security import HTTPBearer
+from fastapi.middleware.cors import CORSMiddleware
 
 # Create the FastAPI app
 app = FastAPI()
+
+# ✅ Allow requests from your frontend (localhost or deployed frontend)
+origins = [
+    "http://localhost:5173",
+    "https://your-frontend-domain.com",  # optional
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,             # or use ["*"] for all
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Root endpoint
 @app.get("/")
