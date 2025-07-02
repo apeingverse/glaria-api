@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.quests import Quest
 from app.models.project import Project
 from app.models.user import User
-from app.schemas.quest_schema import QuestCreate, QuestOut
+from app.schemas.quest_schema import QuestCreate, QuestOut, QuestSummary
 
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
 
@@ -40,10 +40,11 @@ def create_quest(
     return new_quest
 
 
-@router.get("/", response_model=List[QuestOut])
+@router.get("/", response_model=List[QuestSummary])
 def get_all_quests(db: Session = Depends(get_db)):
     quests = db.query(Quest).all()
     return quests
+
 
 @router.get("/by-project/{project_id}", response_model=list[QuestOut])
 def get_quests_by_project(project_id: int, db: Session = Depends(get_db)):
