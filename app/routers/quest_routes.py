@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.auth.token import get_current_user
 from app.database import get_db
-from app.models.quests import Quest
+from app.models.quests import Quest, QuestAction
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.quest_schema import QuestCreate, QuestOut, QuestSummary
@@ -14,25 +14,30 @@ from app.schemas.quest_schema import QuestCreate, QuestOut, QuestSummary
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
 
 @router.post("/", response_model=QuestOut)
-def create_quest(
-    quest: QuestCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
-):
-    # Empty field check
-    required_fields = ["title", "description", "type", "target_url"]
-    empty_fields = [
-        field for field in required_fields
-        if not getattr(quest, field).strip() or getattr(quest, field).strip().lower() == "string"
+def create_quest(quest: QuestCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Manual empty check
+    required_fields = ["title", "description"]
+    empty_fields = [field for field in required_fields if not getattr(quest, field).strip() or getattr(quest, field).strip().lower() == "string"]
+    if empty_fields:
+        raise HTTPException(status_code=400, detail=f"You cannot leave these fields empty: {', '.join(empty_fields)}")
+
+    # Create main Quest
+    new_quest = Quest(
+        project_id=quest.project_id,
+        title=quest.title,
+        description=quest.description,
+        points=quest.points
+    )
+
+    # Convert action dicts to QuestAction model instances
+    new_quest.actions = [
+        QuestAction(
+            type=action.type,
+            button_type=action.button_type,
+            target_url=action.target_url
+        ) for action in quest.actions
     ]
 
-    if empty_fields:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": f"You cannot leave these fields empty: {', '.join(empty_fields)}"}
-        )
-
-    new_quest = Quest(**quest.dict())
     db.add(new_quest)
     db.commit()
     db.refresh(new_quest)

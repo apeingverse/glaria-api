@@ -1,22 +1,32 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel
+from typing import List, Optional
 from datetime import datetime
-from enum import Enum
-
-class QuestType(str, Enum):
-    defi = "DeFi"
-    nft = "NFT"
-    gamefi = "GameFi"
 
 
+# ACTION SCHEMA
+class QuestActionCreate(BaseModel):
+    type: str
+    button_type: str
+    target_url: Optional[str]
 
+
+class QuestActionOut(BaseModel):
+    id: int
+    type: str
+    button_type: str
+    target_url: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+
+# QUEST CREATE + RESPONSE SCHEMA
 class QuestCreate(BaseModel):
     project_id: int
     title: str
     description: str
-    type: QuestType
-    target_url: str
     points: int
+    actions: List[QuestActionCreate]
 
 
 class QuestOut(BaseModel):
@@ -24,21 +34,21 @@ class QuestOut(BaseModel):
     project_id: int
     title: str
     description: str
-    type: QuestType
-    target_url: str
     points: int
     created_at: datetime
+    actions: List[QuestActionOut]
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 
+# OPTIONAL: QUEST LISTING WITHOUT ACTIONS
 class QuestSummary(BaseModel):
     id: int
     project_id: int
     title: str
     description: str
-    type: QuestType
     points: int
 
-    model_config = {"from_attributes": True}
-
+    class Config:
+        orm_mode = True
