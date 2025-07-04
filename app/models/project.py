@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, func
 from app.database import Base
+from sqlalchemy.orm import relationship
 
 class Project(Base):
     __tablename__ = "projects"
@@ -14,3 +15,6 @@ class Project(Base):
     discord_url = Column(String, nullable=True)
     telegram_url = Column(String, nullable=True)
     twitter_url = Column(String, nullable=True)
+
+     # New: Relationship to Quest model with cascading delete
+    quests = relationship("Quest", backref="project", cascade="all, delete", passive_deletes=True)
