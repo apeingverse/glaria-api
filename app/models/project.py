@@ -10,6 +10,7 @@ class Project(Base):
     description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    image_url = Column(String, nullable=True)  # Store S3 URL of the project's logo/banner
     discord_url = Column(String, nullable=True)
     telegram_url = Column(String, nullable=True)
     twitter_url = Column(String, nullable=True)
