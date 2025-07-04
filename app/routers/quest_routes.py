@@ -54,3 +54,11 @@ def get_quests_by_project(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No quests found for this project")
 
     return quests
+
+
+@router.get("/{quest_id}", response_model=QuestOut)
+def get_quest_by_id(quest_id: int, db: Session = Depends(get_db)):
+    quest = db.query(Quest).filter_by(id=quest_id).first()
+    if not quest:
+        raise HTTPException(status_code=404, detail="Quest not found")
+    return quest
