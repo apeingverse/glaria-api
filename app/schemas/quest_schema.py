@@ -37,6 +37,8 @@ class QuestOut(BaseModel):
     points: int
     created_at: datetime
     actions: List[QuestActionOut]
+    completed: bool = False  # 👈 Add this line
+
 
     class Config:
         orm_mode = True

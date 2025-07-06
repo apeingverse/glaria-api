@@ -63,11 +63,38 @@ def get_quests_by_project(project_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{quest_id}", response_model=QuestOut)
-def get_quest_by_id(quest_id: int, db: Session = Depends(get_db)):
-    quest = db.query(Quest).filter_by(id=quest_id).first()
+def get_quest_by_id(
+    quest_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    # 1. Get quest
+    quest = db.query(Quest).filter(Quest.id == quest_id).first()
     if not quest:
         raise HTTPException(status_code=404, detail="Quest not found")
-    return quest
+
+    # 2. Get actions
+    actions = db.query(QuestAction).filter(QuestAction.quest_id == quest.id).all()
+
+    # 3. Check if user has completed it
+    completed = (
+        db.query(UserCompletedQuest)
+        .filter_by(user_id=user.id, quest_id=quest.id)
+        .first()
+        is not None
+    )
+
+    # 4. Return enriched QuestOut
+    return QuestOut(
+        id=quest.id,
+        project_id=quest.project_id,
+        title=quest.title,
+        description=quest.description,
+        points=quest.points,
+        created_at=quest.created_at,
+        actions=actions,
+        completed=completed
+    )
 
 
 
