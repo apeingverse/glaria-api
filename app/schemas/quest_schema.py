@@ -18,6 +18,8 @@ class QuestActionOut(BaseModel):
 
     class Config:
         orm_mode = True
+    class Config:
+        from_attributes = True
 
 
 # QUEST CREATE + RESPONSE SCHEMA

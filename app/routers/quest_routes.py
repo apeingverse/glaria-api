@@ -10,7 +10,7 @@ from app.models.quests import Quest, QuestAction
 from app.models.project import Project
 from app.models.user import User
 from app.models.user_completed_quest import UserCompletedQuest
-from app.schemas.quest_schema import QuestCreate, QuestOut, QuestSummary
+from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, QuestSummary
 
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
 
@@ -83,6 +83,9 @@ def get_quest_by_id(
         .first()
         is not None
     )
+
+     # ✅ Convert ORM actions to Pydantic models
+    actions_out = [QuestActionOut.from_orm(action) for action in quest.actions]
 
     # 4. Return enriched QuestOut
     return QuestOut(
