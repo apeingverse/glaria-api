@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.quests import Quest, QuestAction
 from app.models.project import Project
 from app.models.user import User
+from app.models.user_completed_quest import UserCompletedQuest
 from app.schemas.quest_schema import QuestCreate, QuestOut, QuestSummary
 
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
@@ -67,3 +68,31 @@ def get_quest_by_id(quest_id: int, db: Session = Depends(get_db)):
     if not quest:
         raise HTTPException(status_code=404, detail="Quest not found")
     return quest
+
+
+
+@router.post("/collect-xp")
+def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # 1. Check if quest exists
+    quest = db.query(Quest).filter(Quest.id == quest_id).first()
+    if not quest:
+        raise HTTPException(status_code=404, detail="Quest not found")
+
+    # 2. Prevent duplicate collection
+    already_collected = db.query(UserCompletedQuest).filter_by(user_id=user.id, quest_id=quest_id).first()
+    if already_collected:
+        raise HTTPException(status_code=400, detail="XP already collected for this quest")
+
+    # 3. Add XP to user's xp column
+    user.xp += quest.points
+
+    # 4. Mark quest as completed
+    db.add(UserCompletedQuest(user_id=user.id, quest_id=quest.id))
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "XP successfully collected",
+        "earned": quest.points,
+        "total_xp": user.xp
+    }
