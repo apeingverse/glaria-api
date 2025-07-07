@@ -10,6 +10,7 @@ from app.models.quests import Quest, QuestAction
 from app.models.project import Project
 from app.models.user import User
 from app.models.user_completed_quest import UserCompletedQuest
+from app.models.user_project_xp import UserProjectXP
 from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, QuestSummary
 
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
@@ -27,7 +28,8 @@ def create_quest(quest: QuestCreate, db: Session = Depends(get_db), user: User =
         project_id=quest.project_id,
         title=quest.title,
         description=quest.description,
-        points=quest.points
+        points=quest.points,
+        project_points=quest.project_points
     )
 
     # Convert action dicts to QuestAction model instances
@@ -94,6 +96,7 @@ def get_quest_by_id(
         title=quest.title,
         description=quest.description,
         points=quest.points,
+        project_points=quest.project_points,
         created_at=quest.created_at,
         actions=actions,
         completed=completed
@@ -113,10 +116,27 @@ def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depend
     if already_collected:
         raise HTTPException(status_code=400, detail="XP already collected for this quest")
 
-    # 3. Add XP to user's xp column
+    # 3. Add Glaria XP to user's xp column
     user.xp += quest.points
 
-    # 4. Mark quest as completed
+    # 4. Add Project XP to user_project_xp
+    project_xp = (
+        db.query(UserProjectXP)
+        .filter_by(user_id=user.id, project_id=quest.project_id)
+        .first()
+    )
+
+    if project_xp:
+        project_xp.xp += quest.project_points
+    else:
+        project_xp = UserProjectXP(
+            user_id=user.id,
+            project_id=quest.project_id,
+            xp=quest.project_points
+        )
+        db.add(project_xp)
+
+    # 5. Mark quest as completed
     db.add(UserCompletedQuest(user_id=user.id, quest_id=quest.id))
     db.commit()
     db.refresh(user)
@@ -124,5 +144,7 @@ def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depend
     return {
         "message": "XP successfully collected",
         "earned": quest.points,
+        "project_points": quest.project_points,
         "total_xp": user.xp
     }
+

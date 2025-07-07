@@ -12,3 +12,4 @@ class User(Base):
     twitter_username = Column(String, nullable=True)                    # from X
     wallet_address = Column(String, unique=True, nullable=True)         # if user connects wallet
     xp = Column(Integer, default=100)
+    nft_image_url = Column(String, nullable=True)  # stores the S3 URL of the NFT

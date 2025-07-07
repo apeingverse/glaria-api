@@ -1,9 +1,12 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.project import Project
+from app.models.quests import Quest
+from app.models.user_project_xp import UserProjectXP
 from app.schemas.project_schema import ProjectCreate, ProjectListItem, ProjectUpdate, ProjectOut
 from app.auth.token import get_current_user
 from app.models.user import User
@@ -134,3 +137,28 @@ def get_project_by_id(project_id: int, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+
+router.get("/xp-by-project/{project_id}")
+def xp_by_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    # Get total project XP from all quests
+    total_project_xp = db.query(func.coalesce(func.sum(Quest.project_points), 0)).filter(
+        Quest.project_id == project_id
+    ).scalar()
+
+    # Get user's claimed XP for that project
+    user_xp_row = db.query(UserProjectXP).filter_by(
+        user_id=user.id, project_id=project_id
+    ).first()
+    claimed_xp = user_xp_row.xp if user_xp_row else 0
+
+    return {
+        "project_id": project_id,
+        "total_project_xp": total_project_xp,
+        "user_claimed_xp": claimed_xp
+    }

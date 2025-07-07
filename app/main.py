@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from app.routers import auth, quest_routes, user_routes, project, glaria_quest
 from app.database import engine
@@ -9,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Create the FastAPI app
 app = FastAPI()
+
+load_dotenv()
 
 # ✅ Allow requests from your frontend (localhost or deployed frontend)
 origins = [

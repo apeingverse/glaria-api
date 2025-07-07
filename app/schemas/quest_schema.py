@@ -28,6 +28,7 @@ class QuestCreate(BaseModel):
     title: str
     description: str
     points: int
+    project_points: int
     actions: List[QuestActionCreate]
 
 
@@ -37,6 +38,7 @@ class QuestOut(BaseModel):
     title: str
     description: str
     points: int
+    project_points: int
     created_at: datetime
     actions: List[QuestActionOut]
     completed: bool = False  # 👈 Add this line
@@ -53,6 +55,7 @@ class QuestSummary(BaseModel):
     title: str
     description: str
     points: int
+    project_points: int
 
     class Config:
         orm_mode = True

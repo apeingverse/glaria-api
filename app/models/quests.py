@@ -11,6 +11,7 @@ class Quest(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     points = Column(Integer, default=0)
+    project_points = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     actions = relationship("QuestAction", back_populates="quest", cascade="all, delete-orphan")

@@ -1,4 +1,5 @@
 # utils/s3.py
+import io
 import boto3
 import uuid
 import os
@@ -28,3 +29,22 @@ def upload_image_to_s3(file, folder="project-images"):
 
     url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
     return url
+
+
+AWS_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+
+s3 = boto3.client("s3")
+
+def upload_image_bytes_to_s3(image_bytes, key=None):
+    if not key:
+        key = f"nfts/{uuid.uuid4()}.png"
+    
+    print("Uploading to S3...")
+    
+    s3.upload_fileobj(
+        Fileobj=io.BytesIO(image_bytes),
+        Bucket=AWS_BUCKET_NAME,
+        Key=key,
+        ExtraArgs={"ContentType": "image/png"}
+    )
+    return f"https://{AWS_BUCKET_NAME}.s3.amazonaws.com/{key}"
