@@ -37,8 +37,6 @@ class QuestOut(BaseModel):
     project_id: int
     title: str
     description: str
-    points: int
-    project_points: int
     created_at: datetime
     actions: List[QuestActionOut]
     completed: bool = False  # 👈 Add this line

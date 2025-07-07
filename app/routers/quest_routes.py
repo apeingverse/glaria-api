@@ -1,10 +1,14 @@
 # routers/quest_routes.py
 
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Security, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
+from jose import JWTError
+import jwt
 from sqlalchemy.orm import Session
-from app.auth.token import get_current_user
+
+from app.auth.token import ALGORITHM, SECRET_KEY, get_current_user
 from app.database import get_db
 from app.models.quests import Quest, QuestAction
 from app.models.project import Project
@@ -13,6 +17,7 @@ from app.models.user_completed_quest import UserCompletedQuest
 from app.models.user_project_xp import UserProjectXP
 from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, QuestSummary
 
+security = HTTPBearer(auto_error=False)
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
 
 @router.post("/", response_model=QuestOut)
@@ -68,39 +73,52 @@ def get_quests_by_project(project_id: int, db: Session = Depends(get_db)):
 def get_quest_by_id(
     quest_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security)
 ):
     # 1. Get quest
     quest = db.query(Quest).filter(Quest.id == quest_id).first()
     if not quest:
         raise HTTPException(status_code=404, detail="Quest not found")
 
-    # 2. Get actions
-    actions = db.query(QuestAction).filter(QuestAction.quest_id == quest.id).all()
-
-    # 3. Check if user has completed it
-    completed = (
-        db.query(UserCompletedQuest)
-        .filter_by(user_id=user.id, quest_id=quest.id)
-        .first()
-        is not None
-    )
-
-     # ✅ Convert ORM actions to Pydantic models
+    # 2. Convert actions to schema
     actions_out = [QuestActionOut.from_orm(action) for action in quest.actions]
 
-    # 4. Return enriched QuestOut
+    # 3. Default
+    completed = False
+
+    # 4. Optional user check
+    if credentials:
+        try:
+            payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = int(payload.get("sub"))
+            completed = db.query(UserCompletedQuest).filter_by(user_id=user_id, quest_id=quest.id).first() is not None
+        except JWTError:
+            pass  # Invalid token, ignore
+
+    # 5. Return response (no points info)
     return QuestOut(
         id=quest.id,
         project_id=quest.project_id,
         title=quest.title,
         description=quest.description,
-        points=quest.points,
-        project_points=quest.project_points,
         created_at=quest.created_at,
-        actions=actions,
+        actions=actions_out,
         completed=completed
     )
+
+
+
+@router.get("/xp-by-quest/{quest_id}")
+def xp_by_quest_id(quest_id: int, db: Session = Depends(get_db)):
+    quest = db.query(Quest).filter(Quest.id == quest_id).first()
+    if not quest:
+        raise HTTPException(status_code=404, detail="Quest not found")
+
+    return {
+        "quest_id": quest.id,
+        "points": quest.points,
+        "project_points": quest.project_points
+    }
 
 
 

@@ -140,7 +140,7 @@ def get_project_by_id(project_id: int, db: Session = Depends(get_db)):
 
 
 
-router.get("/xp-by-project/{project_id}")
+@router.get("/xp-by-project/{project_id}")
 def xp_by_project(
     project_id: int,
     db: Session = Depends(get_db),
