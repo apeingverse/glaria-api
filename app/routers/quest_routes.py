@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from jose import JWTError
-import jwt
+from jose import jwt
 from sqlalchemy.orm import Session
 
 from app.auth.token import ALGORITHM, SECRET_KEY, get_current_user
