@@ -19,7 +19,7 @@ from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, Ques
 
 
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
 
 @router.post("/", response_model=QuestOut)
