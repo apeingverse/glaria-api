@@ -71,6 +71,15 @@ def get_quests_by_project(project_id: int, db: Session = Depends(get_db)):
     return quests
 
 
+@router.get("/completed")
+def get_total_completed_quests(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    total = db.query(UserCompletedQuest).filter_by(user_id=user.id).count()
+    return {"total_claimed_quests": total}
+
+
 @router.get("/{quest_id}", response_model=QuestOut)
 def get_quest_by_id(
     quest_id: int,
@@ -167,4 +176,6 @@ def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depend
         "project_points": quest.project_points,
         "total_xp": user.xp
     }
+
+
 
