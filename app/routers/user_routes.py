@@ -1,16 +1,53 @@
 import os
+from typing import Optional
 from click import prompt
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.auth.token import create_access_token, get_current_user
 from app.database import get_db
 from app.models.user import User
+from app.models.user_project_xp import UserProjectXP
 from app.schemas.user_schema import UserCreate, UserResponse
 import requests
+from sqlalchemy import desc
 
 from app.utils.s3 import upload_image_bytes_to_s3
 
 router = APIRouter(prefix="/api", tags=["User"])
+
+
+class LeaderboardUser(BaseModel):
+    twitter_username: str
+    nft_image_url: Optional[str]
+    total_xp: int
+
+    model_config = {"from_attributes": True}
+
+
+
+@router.get("/leaderboard", response_model=list[LeaderboardUser])
+def get_leaderboard(db: Session = Depends(get_db)):
+    users = (
+        db.query(User)
+        .order_by(desc(User.xp))
+        .limit(100)
+        .all()
+    )
+
+    return [
+        LeaderboardUser(
+            twitter_username=user.twitter_username,
+            nft_image_url=user.nft_image_url,
+            total_xp=user.xp
+        )
+        for user in users
+    ]
+
+
+
+
 
 @router.post("/create-profile")
 def create_profile(user_data: UserCreate, db: Session = Depends(get_db)):
@@ -27,6 +64,7 @@ def create_profile(user_data: UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         twitter_id=user_data.twitter_id,
         twitter_username=user_data.twitter_username,
+        nft_image_url=user_data.nft_image_url  # <-- Save to DB
     )
     db.add(user)
     db.commit()
@@ -61,6 +99,7 @@ def get_my_user_info(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "twitter_username": current_user.twitter_username,
         "xp": current_user.xp,
+        "profile_image": current_user.nft_image_url
     }
 
 

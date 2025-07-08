@@ -59,6 +59,7 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
     }
 
     async with httpx.AsyncClient() as client:
+        # 1. Exchange code for access token
         res = await client.post(
             "https://api.twitter.com/2/oauth2/token",
             data={
@@ -76,6 +77,7 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
         if not access_token:
             return {"error": "Failed to retrieve access token.", "details": token_data}
 
+        # 2. Get user ID and username
         user_res = await client.get(
             "https://api.twitter.com/2/users/me",
             headers={"Authorization": f"Bearer {access_token}"}
@@ -84,7 +86,17 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
         twitter_id = user_data.get("data", {}).get("id")
         twitter_username = user_data.get("data", {}).get("username")
 
-        # Save or update token
+        # 3. Get profile image URL
+        image_res = await client.get(
+            f"https://api.twitter.com/2/users/{twitter_id}?user.fields=profile_image_url",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        image_data = image_res.json()
+        profile_image_url = image_data.get("data", {}).get("profile_image_url", "")
+        if profile_image_url:
+            profile_image_url = profile_image_url.replace("_normal", "")  # High-res image
+
+        # 4. Save or update token
         existing_token = db.query(TwitterToken).filter_by(twitter_id=twitter_id).first()
         if existing_token:
             existing_token.access_token = access_token
@@ -98,19 +110,22 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
             ))
         db.commit()
 
-        # Check user
+        # 5. Check if user exists
         existing_user = db.query(User).filter_by(twitter_id=twitter_id).first()
         user_exists = existing_user is not None
 
         jwt_token = None
         if user_exists:
+            existing_user.nft_image_url = profile_image_url  # ✅ Save image to DB
+            db.commit()
             jwt_token = create_access_token(data={"sub": str(existing_user.id)})
 
-    # 🔁 Redirect to frontend with query params
+    # 6. 🔁 Redirect to frontend with info
     query_params = urlencode({
         "access_token": jwt_token or "",
         "username": twitter_username,
         "twitter_id": twitter_id,
+        "image": profile_image_url,
         "userExists": str(user_exists).lower()
     })
 

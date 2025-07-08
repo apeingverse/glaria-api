@@ -8,6 +8,7 @@ class UserCreate(BaseModel):
     twitter_id: Optional[str] = None
     twitter_username: Optional[str] = None
     wallet_address: Optional[str] = None
+    nft_image_url: Optional[str] = None
 
 
 class UserResponse(BaseModel):
