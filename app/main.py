@@ -16,9 +16,8 @@ load_dotenv()
 # ✅ Allow requests from your frontend (localhost or deployed frontend)
 origins = [
     "http://localhost:5173",
-    "https://your-frontend-domain.com",
     "https://www.glaria.xyz",
-    "https://glaria-api.onrender.com/"  # optional
+    "https://glaria-api.onrender.com"  # optional
 ]
 app.add_middleware(
     CORSMiddleware,

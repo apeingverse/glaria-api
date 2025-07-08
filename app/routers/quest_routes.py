@@ -17,7 +17,9 @@ from app.models.user_completed_quest import UserCompletedQuest
 from app.models.user_project_xp import UserProjectXP
 from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, QuestSummary
 
-security = HTTPBearer(auto_error=False)
+
+
+security = HTTPBearer()
 router = APIRouter(prefix="/api/quests", tags=["Quests"])
 
 @router.post("/", response_model=QuestOut)
