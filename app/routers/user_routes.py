@@ -30,22 +30,19 @@ class LeaderboardUser(BaseModel):
 @router.get("/leaderboard", response_model=list[LeaderboardUser])
 def get_leaderboard(db: Session = Depends(get_db)):
     def mask_username(username: str) -> str:
-        if not username or len(username) < 3:
-            return "*" * len(username)
-        first = username[:2]
-        last = username[-2:]
-        middle = "*" * (len(username) - len(first) - len(last))
-        return f"{first}{middle}{last}"
+        if not username or len(username) < 2:
+            return "***"
+        return f"{username[:2]}***"
 
     xp_data = (
         db.query(
             User.twitter_username,
             User.nft_image_url,
-            func.coalesce(func.sum(UserProjectXP.xp), 0).label("total_xp")
+            (User.xp + func.coalesce(func.sum(UserProjectXP.xp), 0)).label("total_xp")
         )
         .outerjoin(UserProjectXP, User.id == UserProjectXP.user_id)
         .group_by(User.id)
-        .order_by(func.sum(UserProjectXP.xp).desc())
+        .order_by((User.xp + func.coalesce(func.sum(UserProjectXP.xp), 0)).desc())
         .all()
     )
 
