@@ -1,5 +1,6 @@
 # routers/quest_routes.py
 
+import random
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -15,7 +16,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.models.user_completed_quest import UserCompletedQuest
 from app.models.user_project_xp import UserProjectXP
-from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, QuestSummary
+from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, QuestSummary, RandomQuestOut
 
 
 
@@ -178,4 +179,15 @@ def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depend
     }
 
 
+@router.get("/quests/random", response_model=list[RandomQuestOut])
+def get_random_quests(db: Session = Depends(get_db)):
+    all_quests = db.query(Quest).all()
+    random.shuffle(all_quests)
+
+    if len(all_quests) <= 6:
+        selected = all_quests
+    else:
+        selected = random.sample(all_quests, 6)
+
+    return selected
 

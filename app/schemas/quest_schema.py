@@ -57,3 +57,12 @@ class QuestSummary(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class RandomQuestOut(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    description: str
+
+    model_config = {"from_attributes": True}
