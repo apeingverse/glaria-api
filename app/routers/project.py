@@ -162,3 +162,30 @@ def xp_by_project(
         "total_project_xp": total_project_xp,
         "user_claimed_xp": claimed_xp
     }
+
+
+@router.get("/projects/{project_id}/leaderboard")
+def get_project_leaderboard(project_id: int, db: Session = Depends(get_db)):
+    results = (
+        db.query(
+            User.twitter_username,
+            User.nft_image_url,
+            UserProjectXP.xp
+        )
+        .join(UserProjectXP, User.id == UserProjectXP.user_id)
+        .filter(UserProjectXP.project_id == project_id)
+        .order_by(UserProjectXP.xp.desc())
+        .all()
+    )
+
+    def mask_username(username: str) -> str:
+        return username[:2] + "**" if len(username) >= 3 else "*" * len(username)
+
+    return [
+        {
+            "twitter_username": mask_username(r.twitter_username),
+            "nft_image_url": r.nft_image_url,
+            "project_xp": r.xp
+        }
+        for r in results
+    ]
