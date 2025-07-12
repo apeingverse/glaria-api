@@ -56,32 +56,34 @@ def get_glaria_quests(
 
 
 @router.post("/collect-glaria-xp")
-def collect_glaria_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def collect_glaria_xp(
+    quest_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
     # 1. Check if glaria quest exists
     quest = db.query(GlariaQuest).filter(GlariaQuest.id == quest_id).first()
     if not quest:
         raise HTTPException(status_code=404, detail="Glaria quest not found")
 
-    # 2. Check if XP was already collected
+    # 2. Check if already collected
     already_collected = db.query(UserCompletedQuest).filter_by(
         user_id=user.id, quest_id=quest_id, quest_type="glaria"
     ).first()
     if already_collected:
-        raise HTTPException(status_code=400, detail="XP already collected for this glaria quest")
-
-    # 3. Add XP to user
-    user.xp += quest.points
-
+        raise HTTPException(status_code=409, detail="XP already collected for this glaria quest")
 
     try:
-        db.add(UserCompletedQuest(user_id=user.id, quest_id=quest.id, quest_type="glaria"))
+        # 3. Update XP and insert completion record in one go
+        user.xp += quest.points
+        db.add(UserCompletedQuest(
+            user_id=user.id, quest_id=quest.id, quest_type="glaria"
+        ))
         db.commit()
+        db.refresh(user)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="XP already collected for this quest")
-    # 4. Record as completed
-    
-    db.refresh(user)
+        raise HTTPException(status_code=409, detail="XP already collected")
 
     return {
         "message": "XP successfully collected from Glaria quest",
