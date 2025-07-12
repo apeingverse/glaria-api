@@ -144,7 +144,7 @@ def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depend
     # 2. Prevent duplicate collection
     already_collected = db.query(UserCompletedQuest).filter_by(user_id=user.id, quest_id=quest_id).first()
     if already_collected:
-        raise HTTPException(status_code=400, detail="XP already collected for this quest")
+        raise HTTPException(status_code=409, detail="XP already collected for this quest")
 
     # 3. Add Glaria XP to user's xp column
     user.xp += quest.points
