@@ -1,3 +1,4 @@
+from sqlite3 import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -71,9 +72,15 @@ def collect_glaria_xp(quest_id: int, db: Session = Depends(get_db), user: User =
     # 3. Add XP to user
     user.xp += quest.points
 
+
+    try:
+        db.add(UserCompletedQuest(user_id=user.id, quest_id=quest.id, quest_type="glaria"))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="XP already collected for this quest")
     # 4. Record as completed
-    db.add(UserCompletedQuest(user_id=user.id, quest_id=quest.id, quest_type="glaria"))
-    db.commit()
+    
     db.refresh(user)
 
     return {
