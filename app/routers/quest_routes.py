@@ -14,7 +14,7 @@ from app.database import get_db
 from app.models.quests import Quest, QuestAction
 from app.models.project import Project
 from app.models.user import User
-from app.models.user_completed_quest import UserCompletedQuest
+from app.models.user_completed_quest import QuestTypeEnum, UserCompletedQuest
 from app.models.user_project_xp import UserProjectXP
 from app.schemas.quest_schema import QuestActionOut, QuestCreate, QuestOut, QuestSummary, RandomQuestOut
 
@@ -162,7 +162,8 @@ def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depend
         project_xp = UserProjectXP(
             user_id=user.id,
             project_id=quest.project_id,
-            xp=quest.project_points
+            xp=quest.project_points,
+            quest_type=QuestTypeEnum.project
         )
         db.add(project_xp)
 
