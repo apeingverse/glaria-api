@@ -162,12 +162,12 @@ def collect_xp(quest_id: int, db: Session = Depends(get_db), user: User = Depend
         project_xp = UserProjectXP(
             user_id=user.id,
             project_id=quest.project_id,
-            xp=quest.project_points,
+            xp=quest.project_points
         )
         db.add(project_xp)
 
     # 5. Mark quest as completed
-    db.add(UserCompletedQuest(user_id=user.id, quest_id=quest.id))
+    db.add(UserCompletedQuest(user_id=user.id, quest_id=quest.id,quest_type=QuestTypeEnum.project))
     db.commit()
     db.refresh(user)
 
