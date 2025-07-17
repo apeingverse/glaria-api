@@ -129,4 +129,4 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
         "userExists": str(user_exists).lower()
     })
 
-    return RedirectResponse(f"http://localhost:5173/oauth-success?{query_params}")
+    return RedirectResponse(f"https://www.glaria.xyz/oauth-success?{query_params}")
