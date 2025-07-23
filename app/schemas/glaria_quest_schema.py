@@ -19,7 +19,7 @@ class GlariaQuestOut(BaseModel):
     button_type: str
     target_url: Optional[str]
     points: int
-    completed: bool 
+    completed: Optional[bool] = None
 
     class Config:
         from_attributes = True
