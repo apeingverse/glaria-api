@@ -78,7 +78,7 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
             },
             headers=headers,
         )
-        token_data = await res.json()
+        token_data = res.json()
         access_token = token_data.get("access_token")
         refresh_token = token_data.get("refresh_token")
 
@@ -86,20 +86,20 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
             return {"error": "Failed to retrieve access token.", "details": token_data}
 
         # 2. Get user ID and username
-        user_res = await client.get(
+        user_res = client.get(
             "https://api.twitter.com/2/users/me",
             headers={"Authorization": f"Bearer {access_token}"}
         )
-        user_data = await user_res.json()
+        user_data = user_res.json()
         twitter_id = user_data.get("data", {}).get("id")
         twitter_username = user_data.get("data", {}).get("username")
 
         # 3. Get profile image URL
-        image_res = await client.get(
+        image_res = client.get(
             f"https://api.twitter.com/2/users/{twitter_id}?user.fields=profile_image_url",
             headers={"Authorization": f"Bearer {access_token}"}
         )
-        image_data = await image_res.json()
+        image_data =image_res.json()
         profile_image_url = image_data.get("data", {}).get("profile_image_url")
 
         # Use fallback if no image
