@@ -48,6 +48,8 @@ def twitter_login():
 
 @router.get("/auth/twitter/callback")
 async def twitter_callback(code: str, state: str, db: Session = Depends(get_db)):
+    
+    
     verifier = verifier_store.get(state)
     if not verifier:
         return {"error": "Missing code_verifier for state."}
@@ -87,15 +89,24 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
         twitter_username = user_data.get("data", {}).get("username")
 
         # 3. Get profile image URL
-        image_res = await client.get(
-            f"https://api.twitter.com/2/users/{twitter_id}?user.fields=profile_image_url",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        image_data = image_res.json()
-        profile_image_url = image_data.get("data", {}).get("profile_image_url", "")
-        if profile_image_url:
-            profile_image_url = profile_image_url.replace("_normal", "")  # High-res image
+    image_res = await client.get(
+        f"https://api.twitter.com/2/users/{twitter_id}?user.fields=profile_image_url",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
 
+    # 🔥 FIX: Await the .json() method
+    image_data = await image_res.json()
+
+    # Extract image safely
+    profile_image_url = image_data.get("data", {}).get("profile_image_url")
+
+    # Use fallback if not available
+    if not profile_image_url:
+        profile_image_url = "https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png"
+    else:
+        # Upgrade to high-resolution
+        profile_image_url = profile_image_url.replace("_normal", "")
+        
         # 4. Save or update token
         existing_token = db.query(TwitterToken).filter_by(twitter_id=twitter_id).first()
         if existing_token:
