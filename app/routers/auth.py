@@ -145,11 +145,21 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
 
 @router.get("/api/auth/nonce")
 async def get_nonce(address: str, db: Session = Depends(get_db)):
+    # ✅ Validate address format
+    if not address or not address.startswith("0x") or len(address) != 42:
+        raise HTTPException(status_code=400, detail="Invalid wallet address")
+
+    # ✅ Clean the address
+    clean_address = address.strip().lower()
+
+    # ✅ Generate and store nonce
     nonce = ''.join(random.choices(string.digits, k=6))
-    db_nonce = WalletNonce(address=address.lower(), nonce=nonce)
+    db_nonce = WalletNonce(address=clean_address, nonce=nonce)
     db.add(db_nonce)
     db.commit()
+
     return {"nonce": nonce}
+
 
 class WalletLoginWithNonce(BaseModel):
     address: str
