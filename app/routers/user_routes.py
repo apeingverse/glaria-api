@@ -109,9 +109,9 @@ def get_my_user_info(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "twitter_username": current_user.twitter_username,
         "xp": current_user.xp,
-        "profile_image": current_user.nft_image_url
+        "profile_image": current_user.nft_image_url,
+        "wallet_address": current_user.wallet_address or "PLEASE CONNECT"
     }
-
 
 
 DEEPAI_API_KEY = os.getenv("DEEPAI_API_KEY")  # store this in your .env

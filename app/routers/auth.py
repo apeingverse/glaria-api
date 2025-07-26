@@ -203,10 +203,18 @@ async def wallet_login(payload: WalletLoginRequest, db: Session = Depends(get_db
     # ✅ Compare recovered address
     if recovered.lower() != address:
         raise HTTPException(status_code=401, detail="Invalid signature")
+    
+
+     # ✅ Step 3: Only allow wallet connection for existing users
+    user = db.query(User).filter_by(wallet_address=address).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User does not exist")
+
 
     # ✅ (Optional) Only delete nonce if you want one-time usage
-    # db.delete(db_nonce)
-    # db.commit()
+    db.delete(db_nonce)
+    db.commit()
 
     # ✅ Return login success
     return {"message": "Authenticated", "address": recovered}
