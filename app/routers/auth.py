@@ -14,7 +14,7 @@ from app.database import get_db
 from app.models.twitter_token import TwitterToken
 from app.models.user import User
 
-from app.auth.token import create_access_token
+from app.auth.token import create_access_token, get_current_user
 
 from eth_account.messages import defunct_hash_message
 from eth_account import Account
@@ -175,46 +175,58 @@ class WalletLoginRequest(BaseModel):
     address: str
     signature: str
 
-@router.post("/api/auth/wallet-login")
-async def wallet_login(payload: WalletLoginRequest, db: Session = Depends(get_db)):
+class WalletConnectRequest(BaseModel):
+    address: str
+    signature: str
+
+@router.post("/api/auth/wallet-connect")
+async def wallet_connect(
+    payload: WalletConnectRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     address = payload.address.strip().lower()
     signature = payload.signature
 
-    # ✅ Try to get latest nonce (used or unused)
+    # Step 1: Get nonce
     db_nonce = (
         db.query(WalletNonce)
         .filter(WalletNonce.address == address)
         .order_by(WalletNonce.created_at.desc())
         .first()
     )
-
     if not db_nonce:
-        raise HTTPException(status_code=400, detail="No nonce available for this address")
+        raise HTTPException(status_code=400, detail="No nonce found for this wallet")
 
-    # ✅ Reconstruct the original message
+    # Step 2: Verify signature
     message = f"Sign this nonce to authenticate: {db_nonce.nonce}"
-    encoded_msg = encode_defunct(text=message)
+    encoded = encode_defunct(text=message)
 
     try:
-        recovered = Account.recover_message(encoded_msg, signature=signature)
+        recovered = Account.recover_message(encoded, signature=signature)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Signature verification failed: {str(e)}")
 
-    # ✅ Compare recovered address
     if recovered.lower() != address:
-        raise HTTPException(status_code=401, detail="Invalid signature")
-    
+        raise HTTPException(status_code=401, detail="Signature does not match address")
 
-     # ✅ Step 3: Only allow wallet connection for existing users
-    user = db.query(User).filter_by(wallet_address=address).first()
+    # ✅ Step 3: Prevent wallet reuse
+    existing_user = db.query(User).filter(
+        User.wallet_address == address,
+        User.id != current_user.id
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=409,
+            detail="This wallet is already connected to another account."
+        )
 
-    if not user:
-        raise HTTPException(status_code=404, detail="User does not exist")
-
-
-    # ✅ (Optional) Only delete nonce if you want one-time usage
+    # ✅ Step 4: Update wallet address
+    current_user.wallet_address = address
     db.delete(db_nonce)
     db.commit()
 
-    # ✅ Return login success
-    return {"message": "Authenticated", "address": recovered}
+    return {
+        "message": "Wallet connected",
+        "wallet_address": address
+    }
