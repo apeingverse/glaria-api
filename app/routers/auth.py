@@ -170,33 +170,43 @@ class WalletLoginWithNonce(BaseModel):
     address: str
     signature: str
 
+
+class WalletLoginRequest(BaseModel):
+    address: str
+    signature: str
+
 @router.post("/api/auth/wallet-login")
-async def wallet_login(payload: WalletLoginWithNonce, db: Session = Depends(get_db)):
-    # Validate inputs
-    if not payload.address or not payload.signature:
-        raise HTTPException(status_code=400, detail="Missing address or signature")
+async def wallet_login(payload: WalletLoginRequest, db: Session = Depends(get_db)):
+    address = payload.address.strip().lower()
+    signature = payload.signature
 
-    address = payload.address.lower()
-    db_nonce = db.query(WalletNonce).filter_by(address=address).order_by(WalletNonce.created_at.desc()).first()
+    # ✅ Try to get latest nonce (used or unused)
+    db_nonce = (
+        db.query(WalletNonce)
+        .filter(WalletNonce.address == address)
+        .order_by(WalletNonce.created_at.desc())
+        .first()
+    )
+
     if not db_nonce:
-        raise HTTPException(status_code=400, detail="Nonce not found")
+        raise HTTPException(status_code=400, detail="No nonce available for this address")
 
-    # ✅ Build message string
+    # ✅ Reconstruct the original message
     message = f"Sign this nonce to authenticate: {db_nonce.nonce}"
-    
-    # ✅ Encode for personal_sign verification
-    encoded_message = encode_defunct(text=message)
+    encoded_msg = encode_defunct(text=message)
 
     try:
-        recovered_address = Account.recover_message(encoded_message, signature=payload.signature)
+        recovered = Account.recover_message(encoded_msg, signature=signature)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Signature verification failed: {str(e)}")
 
-    if recovered_address.lower() != address:
+    # ✅ Compare recovered address
+    if recovered.lower() != address:
         raise HTTPException(status_code=401, detail="Invalid signature")
 
-    # Optionally: remove nonce to prevent replay
-    db.delete(db_nonce)
-    db.commit()
+    # ✅ (Optional) Only delete nonce if you want one-time usage
+    # db.delete(db_nonce)
+    # db.commit()
 
-    return {"message": "Authenticated", "address": recovered_address}
+    # ✅ Return login success
+    return {"message": "Authenticated", "address": recovered}
