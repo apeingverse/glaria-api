@@ -20,6 +20,10 @@ from eth_account.messages import defunct_hash_message
 from eth_account import Account
 
 
+from typing import Optional
+from fastapi import Query
+from fastapi.responses import RedirectResponse
+
 from eth_account.messages import encode_defunct
 load_dotenv()
 router = APIRouter()
@@ -55,12 +59,23 @@ def twitter_login():
 
 
 @router.get("/auth/twitter/callback")
-async def twitter_callback(code: str, state: str, db: Session = Depends(get_db)):
-    
-    
+async def twitter_callback(
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    # If user canceled or any error occurred
+    if error == "access_denied":
+        return RedirectResponse("https://www.glaria.xyz")
+
+    if not code or not state:
+        return RedirectResponse("https://www.glaria.xyz")
+
     verifier = verifier_store.get(state)
     if not verifier:
-        return {"error": "Missing code_verifier for state."}
+        return RedirectResponse("https://www.glaria.xyz")
+    
 
     basic_auth = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     headers = {
@@ -166,14 +181,7 @@ async def get_nonce(address: str, db: Session = Depends(get_db)):
     return {"nonce": nonce}
 
 
-class WalletLoginWithNonce(BaseModel):
-    address: str
-    signature: str
 
-
-class WalletLoginRequest(BaseModel):
-    address: str
-    signature: str
 
 class WalletConnectRequest(BaseModel):
     address: str
