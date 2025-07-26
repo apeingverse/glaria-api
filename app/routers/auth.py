@@ -1,17 +1,23 @@
 from datetime import datetime
+import string
 from urllib.parse import urlencode
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from starlette.responses import JSONResponse
 import httpx, base64, os
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-
+import random
+from app.models.nonce import WalletNonce 
 from app.database import get_db
 from app.models.twitter_token import TwitterToken
 from app.models.user import User
 
 from app.auth.token import create_access_token
+
+from eth_account.messages import defunct_hash_message
+from eth_account import Account
 
 load_dotenv()
 router = APIRouter()
@@ -132,3 +138,43 @@ async def twitter_callback(code: str, state: str, db: Session = Depends(get_db))
     })
 
     return RedirectResponse(f"https://www.glaria.xyz/oauth-success?{query_params}")
+
+
+
+
+
+@router.get("/api/auth/nonce")
+async def get_nonce(address: str, db: Session = Depends(get_db)):
+    nonce = ''.join(random.choices(string.digits, k=6))
+    db_nonce = WalletNonce(address=address.lower(), nonce=nonce)
+    db.add(db_nonce)
+    db.commit()
+    return {"nonce": nonce}
+
+class WalletLoginWithNonce(BaseModel):
+    address: str
+    signature: str
+
+@router.post("/api/auth/wallet-login")
+async def wallet_login(payload: WalletLoginWithNonce, db: Session = Depends(get_db)):
+    db_nonce = db.query(WalletNonce).filter_by(address=payload.address.lower()).order_by(WalletNonce.created_at.desc()).first()
+    if not db_nonce:
+        raise HTTPException(status_code=400, detail="Nonce not found")
+
+    message = f"Sign this nonce to authenticate: {db_nonce.nonce}"
+    message_hash = defunct_hash_message(text=message)
+
+    try:
+        recovered_address = Account.recover_message(message_hash, signature=payload.signature)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Signature verification failed: {e}")
+
+    if recovered_address.lower() != payload.address.lower():
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    # Optionally: mark nonce as used or delete
+    db.delete(db_nonce)
+    db.commit()
+
+    # TODO: lookup or create user
+    return {"message": "Authenticated via wallet", "address": recovered_address}
