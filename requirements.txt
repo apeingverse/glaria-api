@@ -34,3 +34,4 @@ boto3
 python-multipart
 requests
 jwt
+eth_account
