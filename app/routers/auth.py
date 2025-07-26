@@ -152,6 +152,9 @@ async def get_nonce(address: str, db: Session = Depends(get_db)):
     # ✅ Clean the address
     clean_address = address.strip().lower()
 
+      # ✅ Delete any existing nonce for this address
+    db.query(WalletNonce).filter_by(address=clean_address).delete()
+
     # ✅ Generate and store nonce
     nonce = ''.join(random.choices(string.digits, k=6))
     db_nonce = WalletNonce(address=clean_address, nonce=nonce)
