@@ -19,6 +19,8 @@ from app.auth.token import create_access_token
 from eth_account.messages import defunct_hash_message
 from eth_account import Account
 
+
+from eth_account.messages import encode_defunct
 load_dotenv()
 router = APIRouter()
 
@@ -170,24 +172,31 @@ class WalletLoginWithNonce(BaseModel):
 
 @router.post("/api/auth/wallet-login")
 async def wallet_login(payload: WalletLoginWithNonce, db: Session = Depends(get_db)):
-    db_nonce = db.query(WalletNonce).filter_by(address=payload.address.lower()).order_by(WalletNonce.created_at.desc()).first()
+    # Validate inputs
+    if not payload.address or not payload.signature:
+        raise HTTPException(status_code=400, detail="Missing address or signature")
+
+    address = payload.address.lower()
+    db_nonce = db.query(WalletNonce).filter_by(address=address).order_by(WalletNonce.created_at.desc()).first()
     if not db_nonce:
         raise HTTPException(status_code=400, detail="Nonce not found")
 
+    # ✅ Build message string
     message = f"Sign this nonce to authenticate: {db_nonce.nonce}"
-    message_hash = defunct_hash_message(text=message)
+    
+    # ✅ Encode for personal_sign verification
+    encoded_message = encode_defunct(text=message)
 
     try:
-        recovered_address = Account.recover_message(message_hash, signature=payload.signature)
+        recovered_address = Account.recover_message(encoded_message, signature=payload.signature)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Signature verification failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Signature verification failed: {str(e)}")
 
-    if recovered_address.lower() != payload.address.lower():
+    if recovered_address.lower() != address:
         raise HTTPException(status_code=401, detail="Invalid signature")
 
-    # Optionally: mark nonce as used or delete
+    # Optionally: remove nonce to prevent replay
     db.delete(db_nonce)
     db.commit()
 
-    # TODO: lookup or create user
-    return {"message": "Authenticated via wallet", "address": recovered_address}
+    return {"message": "Authenticated", "address": recovered_address}
