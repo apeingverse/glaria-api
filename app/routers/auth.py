@@ -179,7 +179,7 @@ class WalletConnectRequest(BaseModel):
     address: str
     signature: str
 
-@router.post("/api/auth/wallet-connect")
+@router.post("/api/auth/wallet-login")
 async def wallet_connect(
     payload: WalletConnectRequest,
     db: Session = Depends(get_db),
