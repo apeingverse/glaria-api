@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from app.routers import auth, quest_routes, user_routes, project, glaria_quest
+from app.routers import auth, farcaster, quest_routes, user_routes, project, glaria_quest
 from app.database import engine
 from app.models import user
 from app.models.twitter_token import TwitterToken  # ✅ explicitly imports the model class
@@ -39,6 +39,7 @@ app.include_router(user_routes.router)
 app.include_router(project.router)
 app.include_router(quest_routes.router)
 app.include_router(glaria_quest.router)
+app.include_router(farcaster.router)
 
 
 # Create database tables

@@ -238,3 +238,4 @@ async def wallet_connect(
         "message": "Wallet connected",
         "wallet_address": address
     }
+
