@@ -47,13 +47,19 @@ def farcaster_login(payload: FarcasterLoginRequest, db: Session = Depends(get_db
 
 
 
+import random
+import string
+
+def generate_nonce(length: int = 16) -> str:
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choices(chars, k=length))
+
+
 @router.post("/api/auth/farcaster-nonce", response_model=FarcasterNonceResponse)
 def create_farcaster_nonce(db: Session = Depends(get_db)):
-    # Generate a random nonce
-    nonce = str(uuid.uuid4())
-    expires_at = datetime.utcnow() + timedelta(minutes=10)  # nonce expires in 10 mins
+    nonce = generate_nonce(16)  # 16 alphanumeric chars
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
 
-    # Save to DB
     nonce_obj = FarcasterNonce(nonce=nonce, expires_at=expires_at, used=False)
     db.add(nonce_obj)
     db.commit()
