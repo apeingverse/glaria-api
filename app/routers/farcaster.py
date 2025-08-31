@@ -93,7 +93,7 @@ class FarcasterSIWFResponse(BaseModel):
 # -------------------
 
 # Prefer FIP-11 resource URI, but keep legacy fallback
-FIDS_URI_RE = re.compile(r"farcaster://fids/(\d+)", re.IGNORECASE)
+FIDS_URI_RE = re.compile(r"farcaster://fids?/(\\d+)", re.IGNORECASE)
 LEGACY_FID_RE = re.compile(r"\bfid\s*[:=]\s*(\d+)\b", re.IGNORECASE)
 
 def verify_sign_in_message(message: str, signature: str) -> int:
