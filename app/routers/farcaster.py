@@ -58,40 +58,48 @@ FIDS_URI_RE   = re.compile(r"farcaster://fids/(\d+)", re.IGNORECASE)
 LEGACY_FID_RE = re.compile(r"\bfid\s*[:=]\s*(\d+)\b", re.IGNORECASE)
 
 NONCE_TTL = timedelta(minutes=10)  # used only for display/logs; verification relies on expires_at
-
 def verify_sign_in_message(message: str, signature: str) -> int:
     """
-    Raw SIWF verification:
-      1) EIP-191 personal_sign verification
-      2) Extract FID via FIP-11 resource 'farcaster://fids/<fid>' (preferred) or legacy 'fid:<num>'
-    Returns FID (int) or raises ValueError.
+    Verify a Sign-In With Farcaster (FIP-11) message:
+      1) EIP-191 signature recovery
+      2) Extract FID from 'farcaster://fids/<fid>' or legacy 'fid:<num>'
+      3) (Optional but recommended) Verify recovered address matches
+         custody or signer address for that FID via Hub/Neynar.
+    Returns: FID (int)
     """
-    if not isinstance(message, str) or not message.strip():
+    if not message or not isinstance(message, str):
         raise ValueError("Empty SIWF message")
-
-    if not isinstance(signature, str) or not signature:
+    if not signature or not isinstance(signature, str):
         raise ValueError("Invalid signature")
 
-    sig = signature if signature.startswith("0x") else ("0x" + signature)
-    # 65-byte sig => 130 hex chars + '0x' = 132 chars
-    if len(sig) != 132:
+    sig = signature if signature.startswith("0x") else "0x" + signature
+    if not re.fullmatch(r"0x[0-9a-fA-F]{130}", sig):
         raise ValueError("Malformed signature")
 
+    # Recover Ethereum address from signature
     try:
         encoded = encode_defunct(text=message)
-        _recovered = Account.recover_message(encoded, signature=sig)
-        # (Optional) compare _recovered to stored custody/auth addresses if you enforce that
+        recovered_addr = Account.recover_message(encoded, signature=sig)
     except Exception as e:
-        raise ValueError(f"Failed to recover address from signature: {str(e)}")
+        raise ValueError(f"Signature recovery failed: {e}")
 
-    m = FIDS_URI_RE.search(message) or LEGACY_FID_RE.search(message)
-    if not m:
-        raise ValueError("FID not found in signed message (expect 'farcaster://fids/<fid>')")
+    # Extract FID
+    match = FIDS_URI_RE.search(message) or LEGACY_FID_RE.search(message)
+    if not match:
+        raise ValueError("Missing FID (expected 'farcaster://fids/<fid>')")
 
     try:
-        return int(m.group(1))
+        fid = int(match.group(1))
     except Exception:
-        raise ValueError("Invalid FID format in message")
+        raise ValueError("Invalid FID format")
+
+    # 🔒 Recommended: cross-check custody/signers
+    # expected_addr = lookup_custody_or_signer(fid)
+    # if recovered_addr.lower() not in expected_addr:
+    #     raise ValueError("Recovered address not authorized for this FID")
+
+    return fid
+
 
 # -------------------
 # Routes
