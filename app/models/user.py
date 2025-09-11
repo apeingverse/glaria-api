@@ -13,5 +13,3 @@ class User(Base):
     wallet_address = Column(String, unique=True, nullable=True)         # if user connects wallet
     xp = Column(Integer, default=100)
     nft_image_url = Column(String, nullable=True)  # stores the S3 URL of the NFT
-
-    farcaster_id = Column(String, unique=True, nullable=True)

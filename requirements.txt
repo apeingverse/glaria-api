@@ -35,3 +35,5 @@ python-multipart
 requests
 jwt
 eth_account
+siwe
+web3
