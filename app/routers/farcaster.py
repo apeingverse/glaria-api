@@ -23,8 +23,7 @@ def _utcnow() -> datetime:
 
 # ---------- Schemas ----------
 class VerifyIn(BaseModel):
-    # Different MiniKit versions wrap the SIWE message differently.
-    # Let message be Any and normalize it below.
+    # MiniKit can wrap the SIWE message differently; keep this Any and normalize below.
     message: Any
     signature: str
     fid: Optional[int] = None
@@ -42,8 +41,8 @@ class VerifyOut(BaseModel):
 
 def _ensure_raw_siwe(msg: Any) -> str:
     """
-    Normalize the 'message' field to the raw multi-line SIWE string.
-    Handles shapes like:
+    Normalize 'message' to the raw multi-line SIWE string.
+    Handles:
       - "...." (string)
       - {"message": "..."}
       - {"value": {"message": "..."}}
@@ -51,11 +50,9 @@ def _ensure_raw_siwe(msg: Any) -> str:
     if isinstance(msg, str):
         return msg
     if isinstance(msg, dict):
-        # common: { message: "raw-siwe" }
         m = msg.get("message")
         if isinstance(m, str):
             return m
-        # some SDKs: { value: { message: "raw-siwe" } }
         v = msg.get("value")
         if isinstance(v, dict):
             mv = v.get("message")
@@ -69,18 +66,18 @@ def _ensure_raw_siwe(msg: Any) -> str:
 def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Response = None):
     """
     Verify SIWF (Farcaster):
-      - Parse & verify SIWE (domain exact, chainId=10, signature)
-      - Upsert FarcasterUser and mint JWT
-      - Return token in JSON AND set HttpOnly cookie
+      - Parse & verify SIWE (exact domain, chainId=10, signature)
+      - Upsert FarcasterUser
+      - Mint JWT and (optionally) set HttpOnly cookie
     """
-    # 1) Normalize and verify the SIWE/SIWF
+    # 1) Normalize + verify
     raw = _ensure_raw_siwe(payload.message)
     try:
         verified = verify_message_and_get(
             fid_expected=payload.fid,
             message=raw,
             signature=payload.signature,
-            expected_nonce=None,  # not enforcing server nonce right now
+            expected_nonce=None,  # not enforcing server nonce in this flow
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -116,15 +113,11 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
 
     db.commit()
 
-    # 3) Mint JWT
-    # If your helper expects a dict, use:
-    #   token = create_access_token({"sub": str(user.fid), "addr": signer, "dom": domain})
-    token = create_access_token(
-        sub=str(user.fid),
-        extra={"addr": signer, "dom": domain},
-    )
+    # 3) Mint JWT — PASS A SINGLE DICT OF CLAIMS
+    claims = {"sub": str(user.fid), "addr": signer, "dom": domain}
+    token = create_access_token(claims)  # <<— this matches your helper’s signature
 
-    # 4) Set HttpOnly cookie (optional)
+    # 4) (optional) HttpOnly cookie
     if response is not None:
         response.set_cookie(
             key="access_token",
@@ -151,6 +144,5 @@ def me(current_user: FarcasterUser = Depends(get_current_user)):
 
 @router.post("/logout")
 def logout(response: Response):
-    """Clear the auth cookie."""
     response.delete_cookie(key="access_token")
     return {"detail": "Logged out"}
