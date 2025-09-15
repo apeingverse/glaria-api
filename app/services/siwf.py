@@ -4,7 +4,6 @@ from siwe import SiweMessage, DomainMismatch, NonceMismatch, ExpiredMessage
 from web3 import Web3
 from app.core.config import settings
 
-# Farcaster ID Registry lives on Optimism (chainId 10)
 EXPECTED_CHAIN_ID = 10
 
 w3 = Web3(Web3.HTTPProvider(settings.OPTIMISM_RPC_URL, request_kwargs={"timeout": 15}))
@@ -25,22 +24,14 @@ def expected_domain() -> str:
     return settings.expected_domain()
 
 def parse_fid_from_resources(resources: list[str] | None) -> int | None:
-    """
-    Accept common SIWF resource forms:
-      - farcaster://fid/123
-      - farcaster://fids/123
-      - fc://fid/123
-      - farcaster://user?id=123
-    """
+    """Accept common SIWF resource forms."""
     if not resources:
         return None
-
     patterns = [
-        r"^farcaster://fids?/(\d+)$",         # fid or fids
-        r"^fc://fid/(\d+)$",                  # some clients use fc://
-        r"^farcaster://user\?id=(\d+)$",      # older/alt style
+        r"^farcaster://fids?/(\d+)$",       # farcaster://fid/123 or farcaster://fids/123
+        r"^fc://fid/(\d+)$",                # fc://fid/123
+        r"^farcaster://user\?id=(\d+)$",    # farcaster://user?id=123
     ]
-
     for raw in resources:
         s = raw.strip()
         for pat in patterns:
@@ -55,18 +46,17 @@ def verify_message_and_get(
     signature: str,
     expected_nonce: str | None,
 ):
-    # 1) Parse SIWE / SIWF
+    # 1) Parse raw SIWE text (the whole multi-line string)
     siwe = SiweMessage(message=message)
 
-    # 2) Enforce domain + (optional) nonce
+    # 2) Domain & optional server-nonce match
     exp_dom = expected_domain()
     if siwe.domain != exp_dom:
         raise ValueError(f"Domain mismatch: got {siwe.domain} expected {exp_dom}")
     if expected_nonce and siwe.nonce != expected_nonce:
         raise ValueError("Nonce mismatch")
 
-    # 2b) Enforce chain id (Farcaster custody is on Optimism mainnet = 10)
-    # MiniKit is already showing "Chain ID: 10" in your logs; keep this guard:
+    # 2b) Chain id must be Optimism mainnet
     try:
         chain_id = int(getattr(siwe, "chain_id"))
     except Exception:
@@ -74,7 +64,7 @@ def verify_message_and_get(
     if chain_id != EXPECTED_CHAIN_ID:
         raise ValueError(f"Unexpected chain id: {chain_id} (expected {EXPECTED_CHAIN_ID})")
 
-    # 3) Cryptographic verification (EIP-191)
+    # 3) Signature verify (EIP-191)
     try:
         siwe.verify(signature, domain=siwe.domain, nonce=siwe.nonce)
     except (DomainMismatch, NonceMismatch, ExpiredMessage) as e:
@@ -82,7 +72,7 @@ def verify_message_and_get(
 
     signer = Web3.to_checksum_address(siwe.address)
 
-    # 4) Extract fid from resources
+    # 4) Extract FID from resources
     fid = parse_fid_from_resources(getattr(siwe, "resources", None))
     if fid is None:
         raise ValueError("Missing fid in SIWE resources")
@@ -91,7 +81,6 @@ def verify_message_and_get(
 
     # 5) Check current custody on-chain
     custody = ID_REGISTRY.functions.custodyOf(fid).call()
-    # if zero address, int('0x0...', 16) == 0
     custody = None if int(custody, 16) == 0 else Web3.to_checksum_address(custody)
     if custody is None or custody != signer:
         raise ValueError("Signer is not current custody for FID")
