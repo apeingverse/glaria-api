@@ -1,39 +1,28 @@
 # app/routers/farcaster.py
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update, and_, func
+from sqlalchemy import select
 
 from app.database import get_db
-from app.models.farcaster import FarcasterNonce, FarcasterUser
+from app.models.farcaster import FarcasterUser
 from app.services.siwf import verify_message_and_get
 from app.auth.token import create_access_token, get_current_user
 
-import secrets
-import string
-
 router = APIRouter(prefix="/farcaster", tags=["farcaster"])
-
-ALPHANUM = string.ascii_letters + string.digits
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
-def _make_nonce(n: int = 24) -> str:
-    return "".join(secrets.choice(ALPHANUM) for _ in range(n))
-
 # ---------- Schemas ----------
-class NonceOut(BaseModel):
-    nonce: str
-    expires_in: int  # seconds
-
 class VerifyIn(BaseModel):
-    message: str
+    # Accept ANY so we can unwrap dict shapes from different MiniKit versions
+    message: Any
     signature: str
     fid: Optional[int] = None
     username: Optional[str] = None
@@ -46,70 +35,51 @@ class VerifyOut(BaseModel):
     fid: int
     custody_address: str
 
-# ---------- Routes ----------
-@router.get("/nonce", response_model=NonceOut)
-def get_nonce(db: Session = Depends(get_db)):
-    """Issue a server nonce (single-use, 15m TTL). (Optional feature)"""
-    nonce = _make_nonce(24)
-    ttl_secs = 15 * 60
-    db.add(
-        FarcasterNonce(
-            nonce=nonce,
-            used=False,
-            expires_at=_utcnow() + timedelta(seconds=ttl_secs),
-        )
-    )
-    db.commit()
-    return NonceOut(nonce=nonce, expires_in=ttl_secs)
+def _ensure_raw_siwe(msg: Any) -> str:
+    """
+    Normalizes the 'message' field to the raw multi-line SIWE string.
+    Handles shapes like:
+      - "...." (string)
+      - {"message": "..."}
+      - {"value": {"message": "..."}}
+    """
+    if isinstance(msg, str):
+        return msg
+    if isinstance(msg, dict):
+        if isinstance(msg.get("message"), str):
+            return msg["message"]  # mini SDKs sometimes wrap once
+        val = msg.get("value")
+        if isinstance(val, dict) and isinstance(val.get("message"), str):
+            return val["message"]  # mini SDKs sometimes wrap twice
+    raise HTTPException(status_code=400, detail="Malformed SIWE payload: 'message' must be a string")
 
+# ---------- Routes ----------
 @router.post("/siwf", response_model=VerifyOut)
 def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Response = None):
     """
     Verify SIWF (Farcaster):
-      - Verify SIWE/SIWF (domain match, chainId=10)
-      - (Optionally) consume a server-issued nonce if it exists
+      - Parse & verify SIWE (domain exact, chainId=10, signature)
       - Upsert FarcasterUser and mint JWT
-      - Return token (and set HttpOnly cookie for convenience)
+      - Return token in JSON AND set HttpOnly cookie
     """
-    # 1) Verify SIWF message (this enforces domain and chain id, and signature)
+    # 1) Normalize + Verify
+    raw = _ensure_raw_siwe(payload.message)
     try:
         verified = verify_message_and_get(
             fid_expected=payload.fid,
-            message=payload.message,     # raw multi-line SIWE text
+            message=raw,
             signature=payload.signature,
-            expected_nonce=None,         # we are not requiring server-issued nonce
+            expected_nonce=None,   # no server nonce enforcement right now
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    fid          = verified["fid"]
-    signer       = verified["signer"]
-    signed_nonce = verified["nonce"]
-    domain       = verified["domain"]
+    fid         = verified["fid"]
+    signer      = verified["signer"]
+    domain      = verified["domain"]
 
-    # 2) OPTIONAL: if this nonce exists in DB, mark it used (best-effort)
-    row = db.execute(
-        select(FarcasterNonce)
-        .where(
-            and_(
-                FarcasterNonce.nonce == signed_nonce,
-                FarcasterNonce.used.is_(False),
-                FarcasterNonce.expires_at > func.now(),
-            )
-        )
-    ).scalar_one_or_none()
-    if row:
-        db.execute(
-            update(FarcasterNonce)
-            .where(FarcasterNonce.id == row.id)
-            .values(used=True, fid=fid)
-        )
-        db.commit()
-
-    # 3) Upsert FarcasterUser
-    user = db.execute(
-        select(FarcasterUser).where(FarcasterUser.fid == fid)
-    ).scalar_one_or_none()
+    # 2) Upsert FarcasterUser
+    user = db.execute(select(FarcasterUser).where(FarcasterUser.fid == fid)).scalar_one_or_none()
 
     now = _utcnow()
     if not user:
@@ -130,15 +100,16 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
             user.display_name = payload.display_name
         if payload.pfp_url is not None:
             user.pfp_url = payload.pfp_url
+
     db.commit()
 
-    # 4) Mint JWT
+    # 3) Mint JWT
     token = create_access_token(
         sub=str(user.fid),
         extra={"addr": signer, "dom": domain},
     )
 
-    # 5) Also set as HttpOnly cookie (optional)
+    # 4) Set HttpOnly cookie (optional)
     if response is not None:
         response.set_cookie(
             key="access_token",
@@ -146,7 +117,7 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
             httponly=True,
             secure=True,
             samesite="lax",
-            max_age=60 * 60 * 24 * 30,  # 30 days
+            max_age=60 * 60 * 24 * 30,
         )
 
     return VerifyOut(access_token=token, fid=user.fid, custody_address=signer)
