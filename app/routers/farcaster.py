@@ -6,8 +6,8 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.farcaster import FarcasterUser
@@ -16,12 +16,15 @@ from app.auth.token import create_access_token, get_current_user
 
 router = APIRouter(prefix="/farcaster", tags=["farcaster"])
 
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
+
 # ---------- Schemas ----------
 class VerifyIn(BaseModel):
-    # Accept ANY so we can unwrap dict shapes from different MiniKit versions
+    # Different MiniKit versions wrap the SIWE message differently.
+    # Let message be Any and normalize it below.
     message: Any
     signature: str
     fid: Optional[int] = None
@@ -29,15 +32,17 @@ class VerifyIn(BaseModel):
     display_name: Optional[str] = None
     pfp_url: Optional[str] = None
 
+
 class VerifyOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     fid: int
     custody_address: str
 
+
 def _ensure_raw_siwe(msg: Any) -> str:
     """
-    Normalizes the 'message' field to the raw multi-line SIWE string.
+    Normalize the 'message' field to the raw multi-line SIWE string.
     Handles shapes like:
       - "...." (string)
       - {"message": "..."}
@@ -46,12 +51,18 @@ def _ensure_raw_siwe(msg: Any) -> str:
     if isinstance(msg, str):
         return msg
     if isinstance(msg, dict):
-        if isinstance(msg.get("message"), str):
-            return msg["message"]  # mini SDKs sometimes wrap once
-        val = msg.get("value")
-        if isinstance(val, dict) and isinstance(val.get("message"), str):
-            return val["message"]  # mini SDKs sometimes wrap twice
+        # common: { message: "raw-siwe" }
+        m = msg.get("message")
+        if isinstance(m, str):
+            return m
+        # some SDKs: { value: { message: "raw-siwe" } }
+        v = msg.get("value")
+        if isinstance(v, dict):
+            mv = v.get("message")
+            if isinstance(mv, str):
+                return mv
     raise HTTPException(status_code=400, detail="Malformed SIWE payload: 'message' must be a string")
+
 
 # ---------- Routes ----------
 @router.post("/siwf", response_model=VerifyOut)
@@ -62,24 +73,26 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
       - Upsert FarcasterUser and mint JWT
       - Return token in JSON AND set HttpOnly cookie
     """
-    # 1) Normalize + Verify
+    # 1) Normalize and verify the SIWE/SIWF
     raw = _ensure_raw_siwe(payload.message)
     try:
         verified = verify_message_and_get(
             fid_expected=payload.fid,
             message=raw,
             signature=payload.signature,
-            expected_nonce=None,   # no server nonce enforcement right now
+            expected_nonce=None,  # not enforcing server nonce right now
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    fid         = verified["fid"]
-    signer      = verified["signer"]
-    domain      = verified["domain"]
+    fid = verified["fid"]
+    signer = verified["signer"]
+    domain = verified["domain"]
 
     # 2) Upsert FarcasterUser
-    user = db.execute(select(FarcasterUser).where(FarcasterUser.fid == fid)).scalar_one_or_none()
+    user = db.execute(
+        select(FarcasterUser).where(FarcasterUser.fid == fid)
+    ).scalar_one_or_none()
 
     now = _utcnow()
     if not user:
@@ -104,6 +117,8 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
     db.commit()
 
     # 3) Mint JWT
+    # If your helper expects a dict, use:
+    #   token = create_access_token({"sub": str(user.fid), "addr": signer, "dom": domain})
     token = create_access_token(
         sub=str(user.fid),
         extra={"addr": signer, "dom": domain},
@@ -117,10 +132,11 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
             httponly=True,
             secure=True,
             samesite="lax",
-            max_age=60 * 60 * 24 * 30,
+            max_age=60 * 60 * 24 * 30,  # 30 days
         )
 
     return VerifyOut(access_token=token, fid=user.fid, custody_address=signer)
+
 
 @router.get("/me")
 def me(current_user: FarcasterUser = Depends(get_current_user)):
@@ -131,6 +147,7 @@ def me(current_user: FarcasterUser = Depends(get_current_user)):
         "display_name": current_user.display_name,
         "pfp_url": current_user.pfp_url,
     }
+
 
 @router.post("/logout")
 def logout(response: Response):
