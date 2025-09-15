@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -21,31 +21,36 @@ router = APIRouter(prefix="/farcaster", tags=["farcaster"])
 
 ALPHANUM = string.ascii_letters + string.digits
 
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
+
 def _make_nonce(n: int = 24) -> str:
     return "".join(secrets.choice(ALPHANUM) for _ in range(n))
+
 
 # ---------- Schemas ----------
 class NonceOut(BaseModel):
     nonce: str
     expires_in: int  # seconds
 
+
 class VerifyIn(BaseModel):
-    # NOTE: allow either raw string or nested object from some SDKs
-    message: Any
+    message: str
     signature: str
     fid: Optional[int] = None
     username: Optional[str] = None
     display_name: Optional[str] = None
     pfp_url: Optional[str] = None
 
+
 class VerifyOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     fid: int
     custody_address: str
+
 
 # ---------- Routes ----------
 @router.get("/nonce", response_model=NonceOut)
@@ -63,32 +68,33 @@ def get_nonce(db: Session = Depends(get_db)):
     db.commit()
     return NonceOut(nonce=nonce, expires_in=ttl_secs)
 
+
 @router.post("/siwf", response_model=VerifyOut)
 def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Response = None):
     """
     Verify SIWF (Farcaster):
-      - Verify SIWE/SIWF (domain, chainId=10)
-      - (Optionally) consume server-issued nonce if you used /farcaster/nonce
+      - Verify SIWE/SIWF (domain, nonce, chainId=10)
+      - Atomically consume server-issued nonce if fresh & unused
       - Upsert FarcasterUser and mint JWT
       - Return token in JSON AND set HttpOnly cookie
     """
-    # 1) Verify message/signature against EIP-4361
+    # 1) Verify SIWF message
     try:
         verified = verify_message_and_get(
             fid_expected=payload.fid,
             message=payload.message,
             signature=payload.signature,
-            expected_nonce=None,  # set to the issued server-nonce if you wire it in
+            expected_nonce=None,  # or your FarcasterNonce if you wire it up
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    fid         = verified["fid"]
-    signer      = verified["signer"]
-    signed_nonce= verified["nonce"]
-    domain      = verified["domain"]
+    fid = verified["fid"]
+    signer = verified["signer"]
+    signed_nonce = verified["nonce"]
+    domain = verified["domain"]
 
-    # 2) Try to atomically mark server-nonce as used, but don't fail if you never issued it
+    # 2) Atomically mark nonce used (only if you're issuing nonces)
     result = db.execute(
         update(FarcasterNonce)
         .where(
@@ -100,17 +106,15 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
         )
         .values(used=True, fid=fid)
     )
-    # If you want to enforce server nonces, uncomment the guard below:
-    # if result.rowcount != 1:
-    #     db.rollback()
-    #     raise HTTPException(status_code=400, detail="Nonce invalid, expired, or already used")
+    if result.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Nonce invalid, expired, or already used")
 
     # 3) Upsert FarcasterUser
     user = db.execute(
         select(FarcasterUser).where(FarcasterUser.fid == fid)
     ).scalar_one_or_none()
 
-    now = _utcnow()
     if not user:
         user = FarcasterUser(
             fid=fid,
@@ -118,7 +122,6 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
             username=payload.username,
             display_name=payload.display_name,
             pfp_url=payload.pfp_url,
-            created_at=now,
         )
         db.add(user)
     else:
@@ -138,7 +141,7 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
         extra={"addr": signer, "dom": domain},
     )
 
-    # Set JWT as HttpOnly cookie (optional — you’re also returning it)
+    # Also set HttpOnly cookie (optional if you rely on localStorage)
     if response is not None:
         response.set_cookie(
             key="access_token",
@@ -151,6 +154,7 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
 
     return VerifyOut(access_token=token, fid=user.fid, custody_address=signer)
 
+
 @router.get("/me")
 def me(current_user: FarcasterUser = Depends(get_current_user)):
     return {
@@ -160,6 +164,7 @@ def me(current_user: FarcasterUser = Depends(get_current_user)):
         "display_name": current_user.display_name,
         "pfp_url": current_user.pfp_url,
     }
+
 
 @router.post("/logout")
 def logout(response: Response):
