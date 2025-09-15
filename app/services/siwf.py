@@ -21,30 +21,10 @@ ID_REGISTRY = w3.eth.contract(
     ],
 )
 
-
 def expected_domain() -> str:
-    # Must match the literal "X wants you to sign in..." first line (host only).
+    # MUST match the SIWE `domain` (first line: "{domain} wants you to sign in…")
+    # e.g. if the message shows "www.glaria.xyz", this must return "www.glaria.xyz"
     return settings.expected_domain()
-
-
-def _parse_siwe_str(raw: str) -> SiweMessage:
-    """
-    Create a SiweMessage instance from a raw EIP-4361 text in a
-    version-compatible way across siwe library variants.
-    """
-    # Newer siwe versions
-    if hasattr(SiweMessage, "from_message"):
-        return SiweMessage.from_message(raw)
-    if hasattr(SiweMessage, "from_string"):
-        return SiweMessage.from_string(raw)  # some versions used this name
-
-    # Fallbacks for legacy versions. Try safest positional init first.
-    try:
-        return SiweMessage(raw)  # positional constructor
-    except Exception:
-        # LAST resort: keyword "message" (will fail on pydantic model versions)
-        return SiweMessage(message=raw)
-
 
 def parse_fid_from_resources(resources: list[str] | None) -> int | None:
     """
@@ -58,9 +38,9 @@ def parse_fid_from_resources(resources: list[str] | None) -> int | None:
         return None
 
     patterns = [
-        r"^farcaster://fids?/(\d+)$",        # fid or fids
-        r"^fc://fid/(\d+)$",                 # fc://fid/123
-        r"^farcaster://user\?id=(\d+)$",     # farcaster://user?id=123
+        r"^farcaster://fids?/(\d+)$",       # fid or fids
+        r"^fc://fid/(\d+)$",
+        r"^farcaster://user\?id=(\d+)$",
     ]
 
     for raw in resources:
@@ -71,38 +51,31 @@ def parse_fid_from_resources(resources: list[str] | None) -> int | None:
                 return int(m.group(1))
     return None
 
-
 def verify_message_and_get(
     fid_expected: int | None,
     message: str,
     signature: str,
     expected_nonce: str | None,
 ):
-    # 1) Parse raw SIWE / SIWF (multi-line EIP-4361 string)
-    siwe = _parse_siwe_str(message)
+    # 1) Parse the raw multi-line SIWE / SIWF string
+    siwe = SiweMessage(message=message)
 
-    # 2) Enforce domain & optional server-provided nonce
+    # 2) Domain & (optional) server-nonce checks
     exp_dom = expected_domain()
     if siwe.domain != exp_dom:
         raise ValueError(f"Domain mismatch: got {siwe.domain} expected {exp_dom}")
     if expected_nonce and siwe.nonce != expected_nonce:
         raise ValueError("Nonce mismatch")
 
-    # 2b) Enforce chain id (Farcaster custody is on Optimism mainnet = 10)
-    chain_id = None
-    # Different siwe versions may expose chain_id or chainId
-    for attr in ("chain_id", "chainId"):
-        v = getattr(siwe, attr, None)
-        if v is not None:
-            try:
-                chain_id = int(v)
-                break
-            except Exception:
-                pass
+    # 2b) Chain id must be Optimism mainnet (10)
+    try:
+        chain_id = int(getattr(siwe, "chain_id"))
+    except Exception:
+        chain_id = None
     if chain_id != EXPECTED_CHAIN_ID:
         raise ValueError(f"Unexpected chain id: {chain_id} (expected {EXPECTED_CHAIN_ID})")
 
-    # 3) Cryptographic verification (EIP-191)
+    # 3) Signature verify (EIP-191)
     try:
         siwe.verify(signature, domain=siwe.domain, nonce=siwe.nonce)
     except (DomainMismatch, NonceMismatch, ExpiredMessage) as e:
@@ -110,15 +83,14 @@ def verify_message_and_get(
 
     signer = Web3.to_checksum_address(siwe.address)
 
-    # 4) Extract fid from resources (handle variations in attribute name too)
-    resources = getattr(siwe, "resources", None) or getattr(siwe, "resources_list", None)
-    fid = parse_fid_from_resources(resources)
+    # 4) Extract FID from resources
+    fid = parse_fid_from_resources(getattr(siwe, "resources", None))
     if fid is None:
         raise ValueError("Missing fid in SIWE resources")
     if fid_expected and fid != fid_expected:
         raise ValueError("FID mismatch")
 
-    # 5) Check current custody on-chain
+    # 5) Current custody must match signer
     custody = ID_REGISTRY.functions.custodyOf(fid).call()
     custody = None if int(custody, 16) == 0 else Web3.to_checksum_address(custody)
     if custody is None or custody != signer:
