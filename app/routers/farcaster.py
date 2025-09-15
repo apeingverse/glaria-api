@@ -7,18 +7,25 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select, update, and_, func
 
 from app.database import get_db
 from app.models.farcaster import FarcasterNonce, FarcasterUser
 from app.services.siwf import verify_message_and_get
 from app.auth.token import create_access_token, get_current_user
 
+import secrets
+import string
+
 router = APIRouter(prefix="/farcaster", tags=["farcaster"])
+
+ALPHANUM = string.ascii_letters + string.digits
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+def _make_nonce(n: int = 24) -> str:
+    return "".join(secrets.choice(ALPHANUM) for _ in range(n))
 
 # ---------- Schemas ----------
 class NonceOut(BaseModel):
@@ -39,31 +46,38 @@ class VerifyOut(BaseModel):
     fid: int
     custody_address: str
 
-# (Optional) keep this if you still want a server-issued nonce endpoint
+# ---------- Routes ----------
 @router.get("/nonce", response_model=NonceOut)
-def get_nonce():
-    # You can keep or remove this. MiniKit doesn't use it.
-    # Provided only for compatibility / future clients.
+def get_nonce(db: Session = Depends(get_db)):
+    """Issue a server nonce (single-use, 15m TTL). (Optional feature)"""
+    nonce = _make_nonce(24)
     ttl_secs = 15 * 60
-    # Not inserting here anymore; we now "tombstone on insert" after verify.
-    return NonceOut(nonce="(client_generated)", expires_in=ttl_secs)
+    db.add(
+        FarcasterNonce(
+            nonce=nonce,
+            used=False,
+            expires_at=_utcnow() + timedelta(seconds=ttl_secs),
+        )
+    )
+    db.commit()
+    return NonceOut(nonce=nonce, expires_in=ttl_secs)
 
 @router.post("/siwf", response_model=VerifyOut)
 def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Response = None):
     """
     Verify SIWF (Farcaster):
-      - Verify SIWE/SIWF (domain, chainId=10, signature, custody)
-      - **Tombstone the SIWE nonce on first use** (unique insert = replay protection)
+      - Verify SIWE/SIWF (domain match, chainId=10)
+      - (Optionally) consume a server-issued nonce if it exists
       - Upsert FarcasterUser and mint JWT
-      - Return token in JSON AND set HttpOnly cookie
+      - Return token (and set HttpOnly cookie for convenience)
     """
-    # 1) Verify cryptographically + domain/chain/fid
+    # 1) Verify SIWF message (this enforces domain and chain id, and signature)
     try:
         verified = verify_message_and_get(
             fid_expected=payload.fid,
-            message=payload.message,
+            message=payload.message,     # raw multi-line SIWE text
             signature=payload.signature,
-            expected_nonce=None,   # we don't pre-issue; accept MiniKit nonce
+            expected_nonce=None,         # we are not requiring server-issued nonce
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -73,21 +87,24 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
     signed_nonce = verified["nonce"]
     domain       = verified["domain"]
 
-    # 2) Replay protection: "consume on insert" using a UNIQUE(nonce) constraint
-    # If this INSERT fails with IntegrityError, the nonce was already used.
-    try:
-        db.add(
-            FarcasterNonce(
-                nonce=signed_nonce,
-                used=True,                        # mark it used immediately
-                fid=fid,
-                expires_at=_utcnow() + timedelta(minutes=30),
+    # 2) OPTIONAL: if this nonce exists in DB, mark it used (best-effort)
+    row = db.execute(
+        select(FarcasterNonce)
+        .where(
+            and_(
+                FarcasterNonce.nonce == signed_nonce,
+                FarcasterNonce.used.is_(False),
+                FarcasterNonce.expires_at > func.now(),
             )
         )
+    ).scalar_one_or_none()
+    if row:
+        db.execute(
+            update(FarcasterNonce)
+            .where(FarcasterNonce.id == row.id)
+            .values(used=True, fid=fid)
+        )
         db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Nonce invalid, expired, or already used")
 
     # 3) Upsert FarcasterUser
     user = db.execute(
@@ -113,7 +130,6 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
             user.display_name = payload.display_name
         if payload.pfp_url is not None:
             user.pfp_url = payload.pfp_url
-
     db.commit()
 
     # 4) Mint JWT
@@ -122,7 +138,7 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
         extra={"addr": signer, "dom": domain},
     )
 
-    # 5) Set HttpOnly cookie
+    # 5) Also set as HttpOnly cookie (optional)
     if response is not None:
         response.set_cookie(
             key="access_token",
@@ -130,7 +146,7 @@ def siwf_verify(payload: VerifyIn, db: Session = Depends(get_db), response: Resp
             httponly=True,
             secure=True,
             samesite="lax",
-            max_age=60 * 60 * 24 * 30,
+            max_age=60 * 60 * 24 * 30,  # 30 days
         )
 
     return VerifyOut(access_token=token, fid=user.fid, custody_address=signer)
