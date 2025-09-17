@@ -43,3 +43,19 @@ class ProjectOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+# In app/schemas/farcaster.py
+class FarcasterQuestOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    type: str
+    button_type: str
+    target_url: Optional[str]
+    points: int
+    project_id: int
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
