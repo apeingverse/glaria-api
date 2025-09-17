@@ -10,7 +10,7 @@ from app.auth.token import get_current_user
 from app.models.farcaster import (
     FarcasterProject, FarcasterQuest, FarcasterUser, FarcasterUserCompletedQuest
 )
-from app.schemas.farcaster import FarcasterQuestOut, ProjectOut, ProjectListItem
+from app.schemas.farcaster import FarcasterQuestOut, FarcasterQuestSchema, ProjectOut, ProjectListItem
 from app.utils.s3 import upload_image_to_s3
 from app.services.siwf import verify_message_and_get
 from app.core.config import settings
@@ -307,7 +307,7 @@ def get_project_leaderboard(project_id: int, db: Session = Depends(get_db)):
     """
 
 
-@router.get("/quests", response_model=List[FarcasterQuestOut])
+@router.get("/quests", response_model=List[FarcasterQuestSchema])
 def get_all_quests(db: Session = Depends(get_db)):
     return db.query(FarcasterQuest).all()
 

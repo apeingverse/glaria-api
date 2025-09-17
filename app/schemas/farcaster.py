@@ -59,3 +59,18 @@ class FarcasterQuestOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class FarcasterQuestSchema(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    description: Optional[str]
+    type: str  # e.g., 'join_discord', 'follow', 'quote_cast'
+    button_type: str  # frontend label, like 'Join Discord'
+    target_url: Optional[str]
+    points: int
+    created_at: Optional[datetime]
+
+    class Config:
+        orm_mode = True
