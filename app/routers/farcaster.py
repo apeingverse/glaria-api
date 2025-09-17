@@ -10,7 +10,7 @@ from app.auth.token import get_current_user
 from app.models.farcaster import (
     FarcasterProject, FarcasterQuest, FarcasterUser, FarcasterUserCompletedQuest
 )
-from app.schemas.project_schema import ProjectOut, ProjectListItem
+from app.schemas.farcaster import ProjectOut, ProjectListItem
 from app.utils.s3 import upload_image_to_s3
 from app.services.siwf import verify_message_and_get
 from app.core.config import settings
