@@ -32,7 +32,8 @@ def claim_points(
 
     # 2. Prevent duplicate claims
     existing = db.query(FarcasterUserCompletedQuest).filter_by(
-        user_id=user.id, quest_id=quest.id
+        farcaster_user_id=user.id,
+        quest_id=quest.id
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Quest already claimed")
