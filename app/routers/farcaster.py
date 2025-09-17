@@ -14,6 +14,7 @@ from app.schemas.farcaster import ProjectOut, ProjectListItem
 from app.utils.s3 import upload_image_to_s3
 from app.services.siwf import verify_message_and_get
 from app.core.config import settings
+from app.auth.token import create_access_token
 
 router = APIRouter(prefix="/farcaster", tags=["farcaster"])
 
