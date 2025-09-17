@@ -253,27 +253,6 @@ def get_project_by_id(project_id: int, db: Session = Depends(get_db)):
     return project
 
 
-@router.get("/xp-by-project/{project_id}")
-def xp_by_project(
-    project_id: int,
-    db: Session = Depends(get_db),
-    user: FarcasterUser = Depends(get_current_user)
-):
-    total_xp = db.query(func.coalesce(func.sum(FarcasterQuest.points), 0)).filter(
-        FarcasterQuest.project_id == project_id
-    ).scalar()
 
-    user_xp = db.query(func.coalesce(func.sum(FarcasterQuest.points), 0)).join(
-        FarcasterUserCompletedQuest, FarcasterUserCompletedQuest.quest_id == FarcasterQuest.id
-    ).filter(
-        FarcasterUserCompletedQuest.farcaster_user_id == user.id,
-        FarcasterQuest.project_id == project_id
-    ).scalar()
-
-    return {
-        "project_id": project_id,
-        "total_project_xp": total_xp,
-        "user_claimed_xp": user_xp
-    }
 
 
