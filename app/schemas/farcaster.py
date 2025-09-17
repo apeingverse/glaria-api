@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from enum import Enum
 
 
 # === Nonce Response ===
@@ -70,3 +71,21 @@ class FarcasterQuestOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+
+class QuestTypeEnum(str, Enum):
+    like = "like"
+    recast = "recast"
+    reply = "reply"
+    follow = "follow"
+
+
+
+class QuestClaimRequest(BaseModel):
+    quest_id: int
+
+class QuestClaimResponse(BaseModel):
+    success: bool
+    message: str
+    points_awarded: int
