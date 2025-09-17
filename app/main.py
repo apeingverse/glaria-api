@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import auth, farcaster, quest_routes, user_routes, project, glaria_quest
+from app.routers import auth, farcaster, quest_routes, user_routes, project, glaria_quest, farcaster_quests
 from app.database import engine, Base
 
 load_dotenv()
@@ -31,6 +31,7 @@ app.include_router(project.router)
 app.include_router(quest_routes.router)
 app.include_router(glaria_quest.router)
 app.include_router(farcaster.router)
+app.include_router(farcaster_quests.router)
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)

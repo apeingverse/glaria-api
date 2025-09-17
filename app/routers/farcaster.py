@@ -240,12 +240,12 @@ def delete_project(
     return {"message": f"Project '{project.name}' deleted"}
 
 
-@router.get("/", response_model=List[ProjectListItem])
+@router.get("/projects", response_model=List[ProjectListItem])
 def get_all_projects(db: Session = Depends(get_db)):
     return db.query(FarcasterProject).all()
 
 
-@router.get("/{project_id}", response_model=ProjectOut)
+@router.get("/projects/{project_id}", response_model=ProjectOut)
 def get_project_by_id(project_id: int, db: Session = Depends(get_db)):
     project = db.query(FarcasterProject).get(project_id)
     if not project:
@@ -277,79 +277,3 @@ def xp_by_project(
     }
 
 
-"""
-@router.get("/{project_id}/leaderboard")
-def get_project_leaderboard(project_id: int, db: Session = Depends(get_db)):
-    results = (
-        db.query(
-            FarcasterUser.username,
-            FarcasterUser.pfp_url,
-            func.coalesce(func.sum(FarcasterQuest.points), 0).label("xp")
-        )
-        .join(FarcasterUserCompletedQuest, FarcasterUser.id == FarcasterUserCompletedQuest.farcaster_user_id)
-        .join(FarcasterQuest, FarcasterQuest.id == FarcasterUserCompletedQuest.quest_id)
-        .filter(FarcasterQuest.project_id == project_id)
-        .group_by(FarcasterUser.id)
-        .order_by(func.sum(FarcasterQuest.points).desc())
-        .all()
-    )
-
-    def mask_username(username: str) -> str:
-        return username[:2] + "**" if username and len(username) >= 3 else "*" * len(username or "")
-
-    return [
-        {
-            "username": mask_username(r.username),
-            "pfp_url": r.pfp_url,
-            "project_xp": r.xp
-        } for r in results
-    ]
-    """
-
-
-@router.get("/quests", response_model=List[FarcasterQuestSchema])
-def get_all_quests(db: Session = Depends(get_db)):
-    return db.query(FarcasterQuest).all()
-
-class CreateQuestIn(BaseModel):
-    title: str
-    description: str
-    type: str
-    button_type: str
-    target_url: Optional[str] = None
-    points: int
-    project_id: int
-
-@router.post("/quests", response_model=FarcasterQuestOut)
-def create_quest(payload: CreateQuestIn, db: Session = Depends(get_db), user: FarcasterUser = Depends(get_current_user)):
-    project = db.query(FarcasterProject).get(payload.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if project.farcaster_user_id != user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-
-    quest = FarcasterQuest(
-        title=payload.title.strip(),
-        description=payload.description.strip(),
-        type=payload.type.strip(),
-        button_type=payload.button_type.strip(),
-        target_url=payload.target_url,
-        points=payload.points,
-        project_id=payload.project_id,
-        created_at=datetime.utcnow()
-    )
-    db.add(quest)
-    db.commit()
-    db.refresh(quest)
-    return quest
-
-@router.get("/quests/project/{project_id}", response_model=List[FarcasterQuestOut])
-def get_quests_by_project_id(project_id: int, db: Session = Depends(get_db)):
-    return db.query(FarcasterQuest).filter(FarcasterQuest.project_id == project_id).all()
-
-@router.get("/quests/by-project/{project_id}", response_model=List[FarcasterQuestOut])
-def get_quest_by_id(quest_id: int, db: Session = Depends(get_db)):
-    quest = db.query(FarcasterQuest).get(quest_id)
-    if not quest:
-        raise HTTPException(status_code=404, detail="Quest not found")
-    return quest
