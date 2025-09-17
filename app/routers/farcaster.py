@@ -347,7 +347,7 @@ def create_quest(payload: CreateQuestIn, db: Session = Depends(get_db), user: Fa
 def get_quests_by_project_id(project_id: int, db: Session = Depends(get_db)):
     return db.query(FarcasterQuest).filter(FarcasterQuest.project_id == project_id).all()
 
-@router.get("/quests/{quest_id}", response_model=FarcasterQuestOut)
+@router.get("/quests/by-project/{project_id}", response_model=List[FarcasterQuestOut])
 def get_quest_by_id(quest_id: int, db: Session = Depends(get_db)):
     quest = db.query(FarcasterQuest).get(quest_id)
     if not quest:
