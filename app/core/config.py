@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = Field(..., alias="aws_secret_access_key")
     AWS_REGION: str = Field(..., alias="aws_region")
     S3_BUCKET_NAME: str = Field(..., alias="s3_bucket_name")
-    DEEPAI_API_KEY: str = Field(..., alias="deepai_api_key")
+    #DEEPAI_API_KEY: str = Field(..., alias="deepai_api_key")
 
     # Twitter OAuth
     TWITTER_CLIENT_ID: str = Field(..., alias="twitter_client_id")
