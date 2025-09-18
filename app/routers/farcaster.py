@@ -160,9 +160,6 @@ def create_project(
     if empty_fields:
         return JSONResponse(status_code=400, content={"message": f"Empty fields: {', '.join(empty_fields)}"})
 
-    existing = db.query(FarcasterProject).filter_by(farcaster_username=farcaster_username).first()
-    if existing:
-        return JSONResponse(status_code=400, content={"message": "Username already has a project"})
 
     image_url = upload_image_to_s3(image)
 

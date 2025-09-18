@@ -61,8 +61,6 @@ def create_quest(
     project = db.query(FarcasterProject).get(payload.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if project.farcaster_user_id != user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
 
     quest = FarcasterQuest(
         title=payload.title.strip(),

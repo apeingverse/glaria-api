@@ -31,6 +31,8 @@ class Settings(BaseModel):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/glaria",
     )
 
+    FARCASTER_API_KEY: str
+
     # On-chain
     OPTIMISM_RPC_URL: str = os.getenv("OPTIMISM_RPC_URL", "https://mainnet.optimism.io")
     ID_REGISTRY_ADDRESS: str = os.getenv(
