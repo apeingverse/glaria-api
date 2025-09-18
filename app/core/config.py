@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     ALLOW_CREDENTIALS: bool = True
 
     # SIWE/Farcaster domain allow-list (authorities, e.g. "www.glaria.xyz", "localhost:3000")
-    ALLOWED_SIWE_DOMAINS: list[str] = Field(default_factory=list)  # override via ALLOWED_SIWE_DOMAINS (CSV)
+    ALLOWED_SIWE_DOMAINS: list[str] = Field(default_factory=list, exclude=True)
 
     # DB
     DATABASE_URL: str = os.getenv(
