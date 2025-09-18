@@ -37,3 +37,4 @@ jwt
 eth_account
 siwe
 web3
+pydantic-settings>=2.0.0

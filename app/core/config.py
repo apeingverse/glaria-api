@@ -1,17 +1,29 @@
-# app/core/config.py
 import os
 from urllib.parse import urlparse
-from pydantic import BaseModel, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _split_csv(val: str | None) -> list[str]:
     return [v.strip() for v in (val or "").split(",") if v.strip()]
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     # App
     APP_NAME: str = "Glaria Backend"
     ENV: str = os.getenv("ENV", "production")
+
+    # In your Settings(BaseModel)
+    AWS_ACCESS_KEY_ID: str = Field(..., alias="aws_access_key_id")
+    AWS_SECRET_ACCESS_KEY: str = Field(..., alias="aws_secret_access_key")
+    AWS_REGION: str = Field(..., alias="aws_region")
+    S3_BUCKET_NAME: str = Field(..., alias="s3_bucket_name")
+    DEEPAI_API_KEY: str = Field(..., alias="deepai_api_key")
+
+    # Twitter OAuth
+    TWITTER_CLIENT_ID: str = Field(..., alias="twitter_client_id")
+    TWITTER_CLIENT_SECRET: str = Field(..., alias="twitter_client_secret")
+    TWITTER_CALLBACK_URL: str = Field(..., alias="twitter_callback_url")
 
     # Frontend URL used for CORS + SIWE domain checks
     NEXT_PUBLIC_URL: str = os.getenv("NEXT_PUBLIC_URL", "https://www.glaria.xyz")
@@ -31,6 +43,7 @@ class Settings(BaseModel):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/glaria",
     )
 
+    # Farcaster API Key (🔑 Required)
     FARCASTER_API_KEY: str
 
     # On-chain
@@ -41,7 +54,6 @@ class Settings(BaseModel):
     )
 
     # Auth / JWT
-    # Keep both names for compatibility; SECRET_KEY first, fallback to JWT_SECRET
     JWT_SECRET: str = os.getenv("SECRET_KEY") or os.getenv("JWT_SECRET", "dev-secret-change-me")
     JWT_ALG: str = "HS256"
     ACCESS_TOKEN_EXPIRES_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", "43200"))  # 30 days
@@ -52,22 +64,16 @@ class Settings(BaseModel):
     SESSION_COOKIE_SECURE: bool = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
     SESSION_COOKIE_SAMESITE: str = os.getenv("SESSION_COOKIE_SAMESITE", "lax")  # 'lax' or 'none'
 
+    # Load .env file
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
     # ---------- Helpers ----------
 
     def expected_domain(self) -> str:
-        """
-        Exact authority string for SIWE 'domain' (line 1 of SIWE).
-        For https://www.glaria.xyz -> 'www.glaria.xyz'.
-        For http://localhost:3000 -> 'localhost:3000'.
-        """
         netloc = urlparse(self.NEXT_PUBLIC_URL).netloc
         return netloc or "www.glaria.xyz"
 
     def allowed_siwe_domains(self) -> set[str]:
-        """
-        Authorities accepted for SIWE 'domain' (for previews / apex).
-        Defaults to {www, apex, localhost dev} unless ALLOWED_SIWE_DOMAINS is set.
-        """
         configured = set(self.ALLOWED_SIWE_DOMAINS or [])
         if configured:
             return configured
@@ -77,9 +83,6 @@ class Settings(BaseModel):
         return {dom, apex, "localhost:3000", "127.0.0.1:3000"}
 
     def frontend_origins(self) -> list[str]:
-        """
-        Full origins (scheme + host[:port]) for CORS.
-        """
         if self.ALLOW_ORIGINS:
             return self.ALLOW_ORIGINS
 
@@ -98,7 +101,7 @@ class Settings(BaseModel):
 def build_settings() -> Settings:
     s = Settings()
 
-    # Ensure async driver
+    # Ensure asyncpg
     if s.DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in s.DATABASE_URL:
         s.DATABASE_URL = s.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
     if s.DATABASE_URL.startswith("postgres://"):
