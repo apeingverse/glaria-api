@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     TWITTER_CLIENT_SECRET: str = Field(..., alias="twitter_client_secret")
     TWITTER_CALLBACK_URL: str = Field(..., alias="twitter_callback_url")
 
+    NEYNAR_API_KEY: str
+
     # Frontend URL used for CORS + SIWE domain checks
     NEXT_PUBLIC_URL: str = os.getenv("NEXT_PUBLIC_URL", "https://www.glaria.xyz")
 
