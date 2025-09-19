@@ -1,4 +1,5 @@
 import requests
+from typing import Optional
 from app.core.config import settings
 
 NEYNAR_API_KEY = settings.NEYNAR_API_KEY
@@ -6,25 +7,22 @@ NEYNAR_API_KEY = settings.NEYNAR_API_KEY
 NEYNAR_HEADERS = {
     "Accept": "application/json",
     "api_key": NEYNAR_API_KEY,
-    "x-api-key": NEYNAR_API_KEY,  # For /v1 endpoints
+    "x-api-key": NEYNAR_API_KEY,
 }
-
 
 def extract_cast_hash(url: str) -> str:
     return url.rstrip("/").split("/")[-1]
 
-
 def extract_username_from_url(url: str) -> str:
     return url.rstrip("/").split("/")[-1]
 
-
-def get_cast_metadata_from_url(target_url: str):
-    cast_url = "https://api.neynar.com/v2/farcaster/cast"
+def get_cast_metadata_from_url(target_url: str) -> Optional[dict]:
+    url = "https://api.neynar.com/v2/farcaster/cast"
     params = {
         "identifier": target_url,
         "type": "url"
     }
-    response = requests.get(cast_url, headers=NEYNAR_HEADERS, params=params)
+    response = requests.get(url, headers=NEYNAR_HEADERS, params=params)
 
     if response.status_code == 200:
         data = response.json().get("cast", {})
@@ -32,9 +30,9 @@ def get_cast_metadata_from_url(target_url: str):
             "target_hash": data.get("hash"),
             "target_fid": data.get("author", {}).get("fid")
         }
-    else:
-        print(f"[get_cast_metadata_from_url] Failed: {response.status_code} - {response.text}")
-        return None
+
+    print(f"[get_cast_metadata_from_url] Failed: {response.status_code} - {response.text}")
+    return None
 
 
 def has_liked_cast(fid: int, target_url: str) -> bool:
@@ -42,14 +40,13 @@ def has_liked_cast(fid: int, target_url: str) -> bool:
     if not meta:
         return False
 
+    url = "https://api.neynar.com/v1/reactionById"
     params = {
         "fid": fid,
         "target_fid": meta["target_fid"],
         "target_hash": meta["target_hash"],
         "reaction_type": "Like"
     }
-
-    url = "https://api.neynar.com/v1/reactionById"
     response = requests.get(url, headers={"x-api-key": NEYNAR_API_KEY}, params=params)
 
     if response.status_code == 200:
@@ -66,14 +63,13 @@ def has_recasted_cast(fid: int, target_url: str) -> bool:
     if not meta:
         return False
 
+    url = "https://api.neynar.com/v1/reactionById"
     params = {
         "fid": fid,
         "target_fid": meta["target_fid"],
         "target_hash": meta["target_hash"],
         "reaction_type": "Recast"
     }
-
-    url = "https://api.neynar.com/v1/reactionById"
     response = requests.get(url, headers={"x-api-key": NEYNAR_API_KEY}, params=params)
 
     if response.status_code == 200:
