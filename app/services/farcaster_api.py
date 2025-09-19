@@ -1,49 +1,88 @@
 import requests
 from app.core.config import settings
 
-# NEYNAR API key (set in .env as neynar_api_key)
 NEYNAR_API_KEY = settings.NEYNAR_API_KEY
 
 NEYNAR_HEADERS = {
     "Accept": "application/json",
     "api_key": NEYNAR_API_KEY,
+    "x-api-key": NEYNAR_API_KEY,  # For /v1 endpoints
 }
 
 
 def extract_cast_hash(url: str) -> str:
-    # Example: https://warpcast.com/username/0xabc123
     return url.rstrip("/").split("/")[-1]
 
 
 def extract_username_from_url(url: str) -> str:
-    # Example: https://warpcast.com/username
     return url.rstrip("/").split("/")[-1]
 
 
-def has_liked_cast(fid: int, target_url: str) -> bool:
-    cast_hash = extract_cast_hash(target_url)
-    url = f"https://api.neynar.com/v2/farcaster/cast-likes?cast_hash={cast_hash}"
-    response = requests.get(url, headers=NEYNAR_HEADERS)
+def get_cast_metadata_from_url(target_url: str):
+    cast_url = "https://api.neynar.com/v2/farcaster/cast"
+    params = {
+        "identifier": target_url,
+        "type": "url"
+    }
+    response = requests.get(cast_url, headers=NEYNAR_HEADERS, params=params)
 
     if response.status_code == 200:
-        likes = response.json().get("likes", [])
-        return any(like.get("fid") == fid for like in likes)
+        data = response.json().get("cast", {})
+        return {
+            "target_hash": data.get("hash"),
+            "target_fid": data.get("author", {}).get("fid")
+        }
+    else:
+        print(f"[get_cast_metadata_from_url] Failed: {response.status_code} - {response.text}")
+        return None
 
-    print(f"[has_liked_cast] Failed to fetch likes: {response.status_code} - {response.text}")
-    return False
+
+def has_liked_cast(fid: int, target_url: str) -> bool:
+    meta = get_cast_metadata_from_url(target_url)
+    if not meta:
+        return False
+
+    params = {
+        "fid": fid,
+        "target_fid": meta["target_fid"],
+        "target_hash": meta["target_hash"],
+        "reaction_type": "Like"
+    }
+
+    url = "https://api.neynar.com/v1/reactionById"
+    response = requests.get(url, headers={"x-api-key": NEYNAR_API_KEY}, params=params)
+
+    if response.status_code == 200:
+        return True
+    elif response.status_code == 404:
+        return False
+    else:
+        print(f"[has_liked_cast] Error: {response.status_code} - {response.text}")
+        return False
 
 
 def has_recasted_cast(fid: int, target_url: str) -> bool:
-    cast_hash = extract_cast_hash(target_url)
-    url = f"https://api.neynar.com/v2/farcaster/cast-recasts?cast_hash={cast_hash}"
-    response = requests.get(url, headers=NEYNAR_HEADERS)
+    meta = get_cast_metadata_from_url(target_url)
+    if not meta:
+        return False
+
+    params = {
+        "fid": fid,
+        "target_fid": meta["target_fid"],
+        "target_hash": meta["target_hash"],
+        "reaction_type": "Recast"
+    }
+
+    url = "https://api.neynar.com/v1/reactionById"
+    response = requests.get(url, headers={"x-api-key": NEYNAR_API_KEY}, params=params)
 
     if response.status_code == 200:
-        recasts = response.json().get("recasts", [])
-        return any(recast.get("fid") == fid for recast in recasts)
-
-    print(f"[has_recasted_cast] Failed to fetch recasts: {response.status_code} - {response.text}")
-    return False
+        return True
+    elif response.status_code == 404:
+        return False
+    else:
+        print(f"[has_recasted_cast] Error: {response.status_code} - {response.text}")
+        return False
 
 
 def has_replied_to_cast(fid: int, target_url: str) -> bool:
