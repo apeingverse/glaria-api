@@ -38,23 +38,29 @@ def get_cast_metadata_from_url(target_url: str) -> Optional[dict]:
 def has_liked_cast(fid: int, target_url: str) -> bool:
     meta = get_cast_metadata_from_url(target_url)
     if not meta:
+        print("[has_liked_cast] Failed to get cast metadata.")
         return False
 
-    url = "https://api.neynar.com/v1/reactionById"
     params = {
         "fid": fid,
         "target_fid": meta["target_fid"],
         "target_hash": meta["target_hash"],
         "reaction_type": "Like"
     }
+
+    url = "https://api.neynar.com/v1/reactionById"
     response = requests.get(url, headers={"x-api-key": NEYNAR_API_KEY}, params=params)
+
+    print(f"[has_liked_cast] URL: {url}")
+    print(f"[has_liked_cast] Params: {params}")
+    print(f"[has_liked_cast] Status: {response.status_code}")
+    print(f"[has_liked_cast] Response: {response.text}")
 
     if response.status_code == 200:
         return True
     elif response.status_code == 404:
         return False
     else:
-        print(f"[has_liked_cast] Error: {response.status_code} - {response.text}")
         return False
 
 
