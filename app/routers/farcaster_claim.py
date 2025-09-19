@@ -75,5 +75,6 @@ def claim_points(
 
     return QuestClaimResponse(
         success=True,
-        message="✅ Quest verified and points claimed!"
+        message="✅ Quest verified and points claimed!",
+        points_awarded=quest.points
     )
